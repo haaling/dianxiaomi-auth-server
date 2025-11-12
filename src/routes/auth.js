@@ -13,8 +13,16 @@ const generateToken = (userId) => {
   );
 };
 
-// 用户注册
+// 用户注册（已禁用 - 请使用管理员接口创建用户）
 router.post('/register', async (req, res) => {
+  // 为了安全，禁用公开注册
+  // 管理员请使用 /api/admin/create-user 接口创建用户
+  return res.status(403).json({
+    success: false,
+    message: '公开注册已关闭，请联系管理员创建账号'
+  });
+  
+  /* 原注册代码已禁用
   try {
     const { username, email, password } = req.body;
 
@@ -88,6 +96,7 @@ router.post('/register', async (req, res) => {
       error: error.message 
     });
   }
+  */
 });
 
 // 用户登录

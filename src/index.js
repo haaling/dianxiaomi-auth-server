@@ -8,8 +8,12 @@ const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const subscriptionRoutes = require('./routes/subscription');
 const deviceRoutes = require('./routes/device');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
+
+// 信任代理 - 解决 Railway 部署问题
+app.set('trust proxy', true);
 
 // 异步连接数据库（不阻塞服务器启动）
 connectDB().catch(err => {
@@ -62,6 +66,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/device', require('./routes/device'));
 app.use('/api/subscription', require('./routes/subscription'));
 app.use('/api/features', require('./routes/features'));
+app.use('/api/admin', adminRoutes); // 管理员路由（需要 API Key）
 
 // 健康检查
 app.get('/health', (req, res) => {
