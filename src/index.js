@@ -11,8 +11,10 @@ const deviceRoutes = require('./routes/device');
 
 const app = express();
 
-// 连接数据库
-connectDB();
+// 异步连接数据库（不阻塞服务器启动）
+connectDB().catch(err => {
+  console.error('数据库连接失败，但服务器继续运行:', err.message);
+});
 
 // 中间件
 app.use(express.json());
@@ -103,11 +105,23 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
+const HOST = '0.0.0.0'; // Railway 需要监听所有接口
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log(`🚀 服务器运行在端口 ${PORT}`);
   console.log(`📝 环境: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 API地址: http://localhost:${PORT}/api`);
+  console.log(`🔗 监听地址: ${HOST}:${PORT}`);
+  console.log(`🏥 健康检查: http://${HOST}:${PORT}/health`);
+  console.log(`📡 API地址: http://${HOST}:${PORT}/api`);
+});
+
+// 优雅关闭
+process.on('SIGTERM', () => {
+  console.log('收到 SIGTERM 信号，正在关闭服务器...');
+  server.close(() => {
+    console.log('服务器已关闭');
+    process.exit(0);
+  });
 });
 
 module.exports = app;
