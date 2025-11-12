@@ -60,14 +60,11 @@ router.post('/create-user', async (req, res) => {
       });
     }
     
-    // 加密密码
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // 创建用户
+    // 创建用户（密码会由 User 模型的 pre('save') 中间件自动加密）
     const user = new User({
       username,
       email,
-      password: hashedPassword,
+      password,  // 直接传入明文密码，让模型自己加密
       isActive: true
     });
     
