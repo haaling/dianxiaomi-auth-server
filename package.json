@@ -1,0 +1,36 @@
+{
+  "name": "dianxiaomi-auth-server",
+  "version": "1.0.0",
+  "description": "Chrome插件认证服务器 - 支持订阅模式和设备数量限制",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "create-test-users": "node scripts/create-test-user.js",
+    "fix-device-index": "node scripts/fix-device-index.js",
+    "create-customer": "node scripts/create-customer-account.js",
+    "list-accounts": "node scripts/list-accounts.js"
+  },
+  "keywords": [
+    "auth",
+    "subscription",
+    "chrome-extension",
+    "device-limit"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "mongoose": "^8.0.3",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.1",
+    "express-rate-limit": "^7.1.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

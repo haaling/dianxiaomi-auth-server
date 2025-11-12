@@ -1,0 +1,97 @@
+# API 测试示例集合
+# 可以导入到 Postman 或其他 API 测试工具
+
+## 1. 用户注册
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "test@example.com",
+  "password": "password123"
+}
+
+###
+
+## 2. 用户登录
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "password123"
+}
+
+###
+
+## 3. 获取订阅状态（需要 Token）
+GET http://localhost:3000/api/subscription/status
+Authorization: Bearer YOUR_TOKEN_HERE
+
+###
+
+## 4. 注册设备（需要 Token）
+POST http://localhost:3000/api/device/register
+Authorization: Bearer YOUR_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "deviceId": "unique-device-id-123",
+  "deviceName": "Chrome on MacBook Pro",
+  "deviceInfo": {
+    "browser": "Chrome",
+    "os": "macOS",
+    "userAgent": "Mozilla/5.0..."
+  }
+}
+
+###
+
+## 5. 验证设备（需要 Token）
+POST http://localhost:3000/api/device/verify
+Authorization: Bearer YOUR_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "deviceId": "unique-device-id-123"
+}
+
+###
+
+## 6. 获取设备列表（需要 Token）
+GET http://localhost:3000/api/device/list
+Authorization: Bearer YOUR_TOKEN_HERE
+
+###
+
+## 7. 移除设备（需要 Token）
+DELETE http://localhost:3000/api/device/unique-device-id-123
+Authorization: Bearer YOUR_TOKEN_HERE
+
+###
+
+## 8. 创建订阅（需要 Token）
+POST http://localhost:3000/api/subscription/subscribe
+Authorization: Bearer YOUR_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "plan": "premium",
+  "duration": 1
+}
+
+###
+
+## 9. 获取当前订阅（需要 Token）
+GET http://localhost:3000/api/subscription/current
+Authorization: Bearer YOUR_TOKEN_HERE
+
+###
+
+## 10. 健康检查（无需认证）
+GET http://localhost:3000/health
+
+###
+
+## 11. 根路由（无需认证）
+GET http://localhost:3000/

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>点小蜜 - 登录</title>
+  <style>
+    body {
+      width: 350px;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    
+    h2 {
+      margin: 0 0 10px 0;
+      color: #333;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    
+    label {
+      font-size: 14px;
+      color: #666;
+      font-weight: 500;
+    }
+    
+    input {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    button {
+      padding: 10px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    button:hover {
+      background: #0056b3;
+    }
+    
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+    }
+    
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    
+    .status.info {
+      background: #d1ecf1;
+      color: #0c5460;
+    }
+    
+    .hidden {
+      display: none;
+    }
+    
+    .device-list {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .device-item {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .device-info {
+      flex: 1;
+    }
+    
+    .device-name {
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    
+    .device-status {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    .btn-small {
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+    
+    .btn-danger {
+      background: #dc3545;
+    }
+    
+    .btn-danger:hover {
+      background: #c82333;
+    }
+    
+    .tabs {
+      display: flex;
+      gap: 10px;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 15px;
+    }
+    
+    .tab {
+      padding: 8px 16px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #666;
+      border-bottom: 2px solid transparent;
+    }
+    
+    .tab.active {
+      color: #007bff;
+      border-bottom-color: #007bff;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>点小蜜认证</h2>
+    
+    <div id="loginView">
+      <div class="tabs">
+        <button class="tab active" data-tab="login">登录</button>
+        <button class="tab" data-tab="register">注册</button>
+      </div>
+      
+      <!-- 登录表单 -->
+      <div id="loginTab" class="tab-content active">
+        <div class="form-group">
+          <label for="loginEmail">邮箱</label>
+          <input type="email" id="loginEmail" placeholder="your@email.com">
+        </div>
+        
+        <div class="form-group">
+          <label for="loginPassword">密码</label>
+          <input type="password" id="loginPassword" placeholder="密码">
+        </div>
+        
+        <button id="loginBtn">登录</button>
+      </div>
+      
+      <!-- 注册表单 -->
+      <div id="registerTab" class="tab-content">
+        <div class="form-group">
+          <label for="registerUsername">用户名</label>
+          <input type="text" id="registerUsername" placeholder="用户名">
+        </div>
+        
+        <div class="form-group">
+          <label for="registerEmail">邮箱</label>
+          <input type="email" id="registerEmail" placeholder="your@email.com">
+        </div>
+        
+        <div class="form-group">
+          <label for="registerPassword">密码</label>
+          <input type="password" id="registerPassword" placeholder="至少6个字符">
+        </div>
+        
+        <button id="registerBtn">注册</button>
+      </div>
+    </div>
+    
+    <!-- 已登录视图 -->
+    <div id="loggedInView" class="hidden">
+      <div class="status info">
+        <div id="userInfo"></div>
+        <div id="subscriptionInfo"></div>
+      </div>
+      
+      <div class="tabs">
+        <button class="tab active" data-tab="devices">设备管理</button>
+        <button class="tab" data-tab="subscription">订阅</button>
+      </div>
+      
+      <!-- 设备管理 -->
+      <div id="devicesTab" class="tab-content active">
+        <div id="deviceList" class="device-list"></div>
+      </div>
+      
+      <!-- 订阅管理 -->
+      <div id="subscriptionTab" class="tab-content">
+        <div id="subscriptionDetails"></div>
+      </div>
+      
+      <button id="logoutBtn">退出登录</button>
+    </div>
+    
+    <div id="statusMessage" class="status hidden"></div>
+  </div>
+  
+  <script src="chrome-extension-client.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
