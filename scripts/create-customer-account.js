@@ -20,7 +20,7 @@ const PLANS = {
   free: {
     name: '免费版',
     maxDevices: 3,
-    validDays: 30,
+    validDays: 3,
     price: 0,
     features: ['基础优化']
   },
@@ -171,12 +171,9 @@ async function createCustomerAccount() {
 
     // 创建用户
     const user = new User({
+      username: customerName || email.split('@')[0], // 使用客户姓名或邮箱前缀作为用户名
       email,
-      password,
-      profile: {
-        name: customerName || email.split('@')[0],
-        note: customerNote
-      }
+      password
     });
 
     await user.save();
