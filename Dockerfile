@@ -7,8 +7,11 @@ WORKDIR /app
 # 复制 package.json 和 package-lock.json
 COPY package*.json ./
 
-# 安装依赖（移除 --only=production，确保所有依赖都安装）
-RUN npm install --production
+# 重置 npm 配置，使用官方源
+RUN npm config set registry https://registry.npmjs.org/
+
+# 安装依赖
+RUN npm install --omit=dev
 
 # 复制应用代码
 COPY . .
