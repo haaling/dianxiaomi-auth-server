@@ -85,6 +85,48 @@ router.post('/create-user', async (req, res) => {
       enterprise: { maxDevices: 50, validDays: 365 }
     };
     
+/**
+ * 续期用户订阅（管理员专用）
+ * POST /api/admin/renew-subscription
+ * Headers: x-admin-api-key: your_api_key
+ * Body: { email, plan?, validDays? }
+ */
+router.post('/renew-subscription', async (req, res) => {
+  try {
+    const { email, plan, validDays } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: '邮箱是必填项' });
+    }
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: '用户不存在' });
+    }
+    let subscription = await Subscription.findOne({ userId: user._id });
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: '该用户没有订阅记录' });
+    }
+    // 续期逻辑：endDate 往后延长 validDays 天，套餐可变更
+    const now = new Date();
+    const currentEnd = subscription.endDate > now ? subscription.endDate : now;
+    const days = validDays ? parseInt(validDays) : 30;
+    subscription.endDate = new Date(currentEnd.getTime() + days * 24 * 60 * 60 * 1000);
+    if (plan) subscription.plan = plan;
+    await subscription.save();
+    return res.json({
+      success: true,
+      message: '续期成功',
+      subscription: {
+        plan: subscription.plan,
+        endDate: subscription.endDate,
+        maxDevices: subscription.maxDevices
+      }
+    });
+  } catch (error) {
+    console.error('[admin/renew-subscription] 续期失败:', error);
+    return res.status(500).json({ success: false, message: '续期失败', error: error.message });
+  }
+});
+    
     // 如果指定了套餐，使用预设配置（除非显式覆盖）
     if (plan && planConfigs[plan]) {
       subscriptionConfig = {
