@@ -151,17 +151,28 @@ router.post('/login', async (req, res) => {
     // 生成Token
     const token = generateToken(user._id);
 
+    // 计算剩余天数
+    let subscriptionData = null;
+    if (subscription) {
+      const now = new Date();
+      const endDate = new Date(subscription.endDate);
+      const daysRemaining = Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
+      
+      subscriptionData = {
+        plan: subscription.plan,
+        maxDevices: subscription.maxDevices,
+        endDate: subscription.endDate,
+        isValid: subscription.isValid(),
+        daysRemaining: daysRemaining
+      };
+    }
+
     res.json({
       success: true,
       message: '登录成功',
       data: {
         user: user.toJSON(),
-        subscription: subscription ? {
-          plan: subscription.plan,
-          maxDevices: subscription.maxDevices,
-          endDate: subscription.endDate,
-          isValid: subscription.isValid()
-        } : null,
+        subscription: subscriptionData,
         token
       }
     });

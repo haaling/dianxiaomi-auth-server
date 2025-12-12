@@ -183,6 +183,11 @@ router.post('/verify', authenticateToken, checkSubscription, async (req, res) =>
     // 更新设备活跃时间
     await device.updateActivity();
 
+    // 计算剩余天数
+    const now = new Date();
+    const endDate = new Date(req.subscription.endDate);
+    const daysRemaining = Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
+    
     res.json({
       success: true,
       message: 'Token有效',
@@ -191,7 +196,9 @@ router.post('/verify', authenticateToken, checkSubscription, async (req, res) =>
         subscription: {
           plan: req.subscription.plan,
           isValid: req.subscription.isValid(),
-          endDate: req.subscription.endDate
+          endDate: req.subscription.endDate,
+          maxDevices: req.subscription.maxDevices,
+          daysRemaining: daysRemaining
         }
       }
     });

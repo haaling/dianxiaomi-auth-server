@@ -158,6 +158,10 @@ router.post('/renew-subscription', async (req, res) => {
       createdAt: new Date().toISOString()
     });
     
+    // 计算剩余天数
+    const now = new Date();
+    const daysRemaining = Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
+    
     res.json({
       success: true,
       message: '用户创建成功',
@@ -174,7 +178,9 @@ router.post('/renew-subscription', async (req, res) => {
           maxDevices: subscription.maxDevices,
           startDate: subscription.startDate,
           endDate: subscription.endDate,
-          validDays: subscriptionConfig.validDays
+          validDays: subscriptionConfig.validDays,
+          daysRemaining: daysRemaining,
+          isValid: subscription.isValid()
         }
       }
     });
