@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>管理员面板 - 点小蜜认证系统</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 30px;
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    
+    .api-key-section {
+      background: #fff9e6;
+      border: 1px solid #ffd666;
+      border-radius: 6px;
+      padding: 15px;
+      margin-bottom: 30px;
+    }
+    
+    .api-key-section label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #666;
+    }
+    
+    .api-key-section input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: monospace;
+    }
+    
+    .tabs {
+      display: flex;
+      gap: 5px;
+      border-bottom: 2px solid #e8e8e8;
+      margin-bottom: 30px;
+    }
+    
+    .tab {
+      padding: 12px 24px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #666;
+      font-size: 15px;
+      font-weight: 500;
+      border-bottom: 3px solid transparent;
+      transition: all 0.3s;
+    }
+    
+    .tab:hover {
+      color: #1890ff;
+    }
+    
+    .tab.active {
+      color: #1890ff;
+      border-bottom-color: #1890ff;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .form-section {
+      background: #fafafa;
+      border-radius: 6px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .form-section h3 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+    }
+    
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    
+    .form-group label {
+      font-size: 13px;
+      color: #666;
+      font-weight: 500;
+    }
+    
+    .form-group input,
+    .form-group select {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .form-group small {
+      color: #999;
+      font-size: 12px;
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+    
+    .btn-primary {
+      background: #1890ff;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #096dd9;
+    }
+    
+    .btn-success {
+      background: #52c41a;
+      color: white;
+    }
+    
+    .btn-success:hover {
+      background: #389e0d;
+    }
+    
+    .btn-warning {
+      background: #faad14;
+      color: white;
+    }
+    
+    .btn-warning:hover {
+      background: #d48806;
+    }
+    
+    .btn-danger {
+      background: #ff4d4f;
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      background: #cf1322;
+    }
+    
+    .btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .result-box {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .result-box.success {
+      background: #f6ffed;
+      border: 1px solid #b7eb8f;
+      color: #135200;
+    }
+    
+    .result-box.error {
+      background: #fff2f0;
+      border: 1px solid #ffccc7;
+      color: #820014;
+    }
+    
+    .hidden {
+      display: none;
+    }
+    
+    .user-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    
+    .user-table th,
+    .user-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e8e8e8;
+    }
+    
+    .user-table th {
+      background: #fafafa;
+      font-weight: 600;
+      color: #666;
+      font-size: 13px;
+    }
+    
+    .user-table td {
+      font-size: 13px;
+      color: #333;
+    }
+    
+    .user-table tr:hover {
+      background: #fafafa;
+    }
+    
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    
+    .badge-success {
+      background: #f6ffed;
+      color: #52c41a;
+      border: 1px solid #b7eb8f;
+    }
+    
+    .badge-warning {
+      background: #fffbe6;
+      color: #faad14;
+      border: 1px solid #ffe58f;
+    }
+    
+    .badge-danger {
+      background: #fff2f0;
+      color: #ff4d4f;
+      border: 1px solid #ffccc7;
+    }
+    
+    .badge-info {
+      background: #e6f7ff;
+      color: #1890ff;
+      border: 1px solid #91d5ff;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #999;
+    }
+    
+    .pagination {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    
+    .pagination button {
+      padding: 6px 12px;
+      font-size: 13px;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .stat-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card h4 {
+      font-size: 13px;
+      opacity: 0.9;
+      margin-bottom: 8px;
+    }
+    
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 管理员面板</h1>
+    <p class="subtitle">点小蜜认证系统后台管理</p>
+    
+    <!-- API Key 输入 -->
+    <div class="api-key-section">
+      <label for="apiKey">🔑 Admin API Key</label>
+      <input type="password" id="apiKey" placeholder="请输入管理员 API Key">
+      <small style="display: block; margin-top: 8px; color: #666;">
+        从环境变量 ADMIN_API_KEY 获取，或联系系统管理员
+      </small>
+    </div>
+    
+    <!-- 标签页 -->
+    <div class="tabs">
+      <button class="tab active" data-tab="create">创建用户</button>
+      <button class="tab" data-tab="renew">续期订阅</button>
+      <button class="tab" data-tab="deduct">扣减时长</button>
+      <button class="tab" data-tab="query">查询用户</button>
+      <button class="tab" data-tab="list">用户列表</button>
+    </div>
+    
+    <!-- 创建用户 -->
+    <div id="createTab" class="tab-content active">
+      <div class="form-section">
+        <h3>📝 创建新用户</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>用户名 *</label>
+            <input type="text" id="createUsername" placeholder="username">
+          </div>
+          <div class="form-group">
+            <label>邮箱 *</label>
+            <input type="email" id="createEmail" placeholder="user@example.com">
+          </div>
+          <div class="form-group">
+            <label>密码 *</label>
+            <input type="password" id="createPassword" placeholder="至少6位">
+          </div>
+          <div class="form-group">
+            <label>套餐类型</label>
+            <select id="createPlan">
+              <option value="free">Free (免费版)</option>
+              <option value="basic">Basic (基础版)</option>
+              <option value="premium" selected>Premium (高级版)</option>
+              <option value="enterprise">Enterprise (企业版)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>最大设备数</label>
+            <input type="number" id="createMaxDevices" placeholder="默认根据套餐">
+            <small>留空则使用套餐默认值</small>
+          </div>
+          <div class="form-group">
+            <label>有效天数</label>
+            <input type="number" id="createValidDays" placeholder="默认根据套餐">
+            <small>留空则使用套餐默认值</small>
+          </div>
+        </div>
+        <div style="margin-top: 15px;">
+          <button class="btn btn-primary" onclick="createUser()">创建用户</button>
+        </div>
+      </div>
+      <div id="createResult" class="result-box hidden"></div>
+    </div>
+    
+    <!-- 续期订阅 -->
+    <div id="renewTab" class="tab-content">
+      <div class="form-section">
+        <h3>🔄 续期用户订阅</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>用户邮箱 *</label>
+            <input type="email" id="renewEmail" placeholder="user@example.com">
+          </div>
+          <div class="form-group">
+            <label>续期天数 *</label>
+            <input type="number" id="renewValidDays" value="30" placeholder="30">
+            <small>从当前到期日期开始延长</small>
+          </div>
+          <div class="form-group">
+            <label>变更套餐（可选）</label>
+            <select id="renewPlan">
+              <option value="">不变更</option>
+              <option value="free">Free (免费版)</option>
+              <option value="basic">Basic (基础版)</option>
+              <option value="premium">Premium (高级版)</option>
+              <option value="enterprise">Enterprise (企业版)</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top: 15px;">
+          <button class="btn btn-success" onclick="renewSubscription()">续期订阅</button>
+        </div>
+      </div>
+      <div id="renewResult" class="result-box hidden"></div>
+    </div>
+    
+    <!-- 扣减时长 -->
+    <div id="deductTab" class="tab-content">
+      <div class="form-section">
+        <h3>⏰ 扣减订阅时长</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>用户邮箱 *</label>
+            <input type="email" id="deductEmail" placeholder="user@example.com">
+          </div>
+          <div class="form-group">
+            <label>扣减天数 *</label>
+            <input type="number" id="deductDays" value="1" placeholder="1">
+            <small>从到期日期减少指定天数</small>
+          </div>
+        </div>
+        <div style="margin-top: 15px;">
+          <button class="btn btn-warning" onclick="deductDays()">扣减时长</button>
+        </div>
+      </div>
+      <div id="deductResult" class="result-box hidden"></div>
+    </div>
+    
+    <!-- 查询用户 -->
+    <div id="queryTab" class="tab-content">
+      <div class="form-section">
+        <h3>🔍 查询用户详情</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>用户邮箱 *</label>
+            <input type="email" id="queryEmail" placeholder="user@example.com">
+          </div>
+        </div>
+        <div style="margin-top: 15px;">
+          <button class="btn btn-primary" onclick="queryUser()">查询用户</button>
+        </div>
+      </div>
+      <div id="queryResult" class="result-box hidden"></div>
+    </div>
+    
+    <!-- 用户列表 -->
+    <div id="listTab" class="tab-content">
+      <div class="form-section">
+        <h3>👥 用户列表</h3>
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+          <button class="btn btn-primary" onclick="loadUserList()">刷新列表</button>
+          <span style="color: #666; font-size: 13px;">每页显示 20 条</span>
+        </div>
+        <div id="userListLoading" class="loading hidden">加载中...</div>
+        <div id="userListContent"></div>
+        <div id="userListPagination" class="pagination hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE_URL = 'https://dianxiaomi-auth-server-production.up.railway.app/api';
+    // const API_BASE_URL = 'http://localhost:3000/api';
+    
+    let currentPage = 1;
+    let totalPages = 1;
+    
+    // 标签页切换
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', function() {
+        const tabName = this.dataset.tab;
+        
+        // 更新标签样式
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+        
+        // 更新内容
+        document.querySelectorAll('.tab-content').forEach(content => {
+          content.classList.remove('active');
+        });
+        document.getElementById(tabName + 'Tab').classList.add('active');
+        
+        // 如果切换到用户列表，自动加载
+        if (tabName === 'list') {
+          loadUserList();
+        }
+      });
+    });
+    
+    // 获取 API Key
+    function getApiKey() {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      if (!apiKey) {
+        alert('请输入 Admin API Key');
+        return null;
+      }
+      return apiKey;
+    }
+    
+    // 显示结果
+    function showResult(elementId, data, isError = false) {
+      const resultBox = document.getElementById(elementId);
+      resultBox.className = 'result-box ' + (isError ? 'error' : 'success');
+      resultBox.textContent = JSON.stringify(data, null, 2);
+      resultBox.classList.remove('hidden');
+    }
+    
+    // 创建用户
+    async function createUser() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+      
+      const username = document.getElementById('createUsername').value.trim();
+      const email = document.getElementById('createEmail').value.trim();
+      const password = document.getElementById('createPassword').value.trim();
+      const plan = document.getElementById('createPlan').value;
+      const maxDevices = document.getElementById('createMaxDevices').value;
+      const validDays = document.getElementById('createValidDays').value;
+      
+      if (!username || !email || !password) {
+        alert('请填写用户名、邮箱和密码');
+        return;
+      }
+      
+      const body = { username, email, password, plan };
+      if (maxDevices) body.maxDevices = parseInt(maxDevices);
+      if (validDays) body.validDays = parseInt(validDays);
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/create-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify(body)
+        });
+        
+        const data = await response.json();
+        showResult('createResult', data, !response.ok);
+        
+        if (response.ok) {
+          // 清空表单
+          document.getElementById('createUsername').value = '';
+          document.getElementById('createEmail').value = '';
+          document.getElementById('createPassword').value = '';
+          document.getElementById('createMaxDevices').value = '';
+          document.getElementById('createValidDays').value = '';
+        }
+      } catch (error) {
+        showResult('createResult', { error: error.message }, true);
+      }
+    }
+    
+    // 续期订阅
+    async function renewSubscription() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+      
+      const email = document.getElementById('renewEmail').value.trim();
+      const validDays = document.getElementById('renewValidDays').value;
+      const plan = document.getElementById('renewPlan').value;
+      
+      if (!email || !validDays) {
+        alert('请填写邮箱和续期天数');
+        return;
+      }
+      
+      const body = { email, validDays: parseInt(validDays) };
+      if (plan) body.plan = plan;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/renew-subscription`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify(body)
+        });
+        
+        const data = await response.json();
+        showResult('renewResult', data, !response.ok);
+      } catch (error) {
+        showResult('renewResult', { error: error.message }, true);
+      }
+    }
+    
+    // 扣减时长
+    async function deductDays() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+      
+      const email = document.getElementById('deductEmail').value.trim();
+      const days = document.getElementById('deductDays').value;
+      
+      if (!email || !days) {
+        alert('请填写邮箱和扣减天数');
+        return;
+      }
+      
+      if (!confirm(`确定要从用户 ${email} 的订阅中扣减 ${days} 天吗？`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/deduct-days`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify({ email, days: parseInt(days) })
+        });
+        
+        const data = await response.json();
+        showResult('deductResult', data, !response.ok);
+      } catch (error) {
+        showResult('deductResult', { error: error.message }, true);
+      }
+    }
+    
+    // 查询用户
+    async function queryUser() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+      
+      const email = document.getElementById('queryEmail').value.trim();
+      
+      if (!email) {
+        alert('请输入邮箱');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/user/${encodeURIComponent(email)}`, {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': apiKey
+          }
+        });
+        
+        const data = await response.json();
+        showResult('queryResult', data, !response.ok);
+      } catch (error) {
+        showResult('queryResult', { error: error.message }, true);
+      }
+    }
+    
+    // 加载用户列表
+    async function loadUserList(page = 1) {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+      
+      const loading = document.getElementById('userListLoading');
+      const content = document.getElementById('userListContent');
+      const pagination = document.getElementById('userListPagination');
+      
+      loading.classList.remove('hidden');
+      content.innerHTML = '';
+      pagination.classList.add('hidden');
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/users?page=${page}&limit=20`, {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': apiKey
+          }
+        });
+        
+        const result = await response.json();
+        loading.classList.add('hidden');
+        
+        if (!response.ok) {
+          content.innerHTML = `<div class="result-box error">${JSON.stringify(result, null, 2)}</div>`;
+          return;
+        }
+        
+        const { users, pagination: pag } = result.data;
+        currentPage = pag.page;
+        totalPages = pag.pages;
+        
+        // 渲染表格
+        let html = '<table class="user-table"><thead><tr>';
+        html += '<th>用户名</th><th>邮箱</th><th>套餐</th><th>剩余天数</th><th>最大设备</th><th>到期时间</th><th>状态</th>';
+        html += '</tr></thead><tbody>';
+        
+        users.forEach(user => {
+          const sub = user.subscription;
+          const now = new Date();
+          const endDate = sub ? new Date(sub.endDate) : null;
+          const daysRemaining = endDate ? Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24))) : 0;
+          const isActive = sub && sub.isActive && endDate > now;
+          
+          html += '<tr>';
+          html += `<td>${user.username}</td>`;
+          html += `<td>${user.email}</td>`;
+          html += `<td>${sub ? `<span class="badge badge-info">${sub.plan.toUpperCase()}</span>` : '-'}</td>`;
+          html += `<td>${sub ? daysRemaining + ' 天' : '-'}</td>`;
+          html += `<td>${sub ? sub.maxDevices : '-'}</td>`;
+          html += `<td>${endDate ? endDate.toLocaleDateString('zh-CN') : '-'}</td>`;
+          html += `<td>${isActive ? '<span class="badge badge-success">有效</span>' : '<span class="badge badge-danger">过期</span>'}</td>`;
+          html += '</tr>';
+        });
+        
+        html += '</tbody></table>';
+        content.innerHTML = html;
+        
+        // 渲染分页
+        if (totalPages > 1) {
+          let pagHtml = '';
+          pagHtml += `<button class="btn btn-primary" ${currentPage === 1 ? 'disabled' : ''} onclick="loadUserList(${currentPage - 1})">上一页</button>`;
+          pagHtml += `<span>第 ${currentPage} / ${totalPages} 页</span>`;
+          pagHtml += `<button class="btn btn-primary" ${currentPage === totalPages ? 'disabled' : ''} onclick="loadUserList(${currentPage + 1})">下一页</button>`;
+          pagination.innerHTML = pagHtml;
+          pagination.classList.remove('hidden');
+        }
+        
+      } catch (error) {
+        loading.classList.add('hidden');
+        content.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>

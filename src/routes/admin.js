@@ -252,4 +252,145 @@ router.get('/users', async (req, res) => {
   }
 });
 
+/**
+ * 扣减用户订阅时长（管理员专用）
+ * POST /api/admin/deduct-days
+ * Headers: x-admin-api-key: your_api_key
+ * Body: { email, days }
+ */
+router.post('/deduct-days', async (req, res) => {
+  try {
+    const { email, days } = req.body;
+    
+    if (!email || !days) {
+      return res.status(400).json({
+        success: false,
+        message: '邮箱和扣减天数是必填项'
+      });
+    }
+    
+    const deductDays = parseInt(days);
+    if (isNaN(deductDays) || deductDays <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: '扣减天数必须是大于0的整数'
+      });
+    }
+    
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+    
+    let subscription = await Subscription.findOne({ userId: user._id });
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: '该用户没有订阅记录'
+      });
+    }
+    
+    // 扣减逻辑：endDate 往前减少 days 天
+    const newEndDate = new Date(subscription.endDate.getTime() - deductDays * 24 * 60 * 60 * 1000);
+    const oldEndDate = subscription.endDate;
+    
+    subscription.endDate = newEndDate;
+    await subscription.save();
+    
+    // 计算剩余天数
+    const now = new Date();
+    const daysRemaining = Math.max(0, Math.ceil((newEndDate - now) / (1000 * 60 * 60 * 24)));
+    
+    console.log('管理员扣减用户时长:', {
+      userId: user._id,
+      email: user.email,
+      deductDays: deductDays,
+      oldEndDate: oldEndDate.toISOString(),
+      newEndDate: newEndDate.toISOString(),
+      daysRemaining: daysRemaining
+    });
+    
+    res.json({
+      success: true,
+      message: `成功扣减 ${deductDays} 天`,
+      data: {
+        user: {
+          email: user.email,
+          username: user.username
+        },
+        subscription: {
+          plan: subscription.plan,
+          maxDevices: subscription.maxDevices,
+          oldEndDate: oldEndDate,
+          newEndDate: newEndDate,
+          daysRemaining: daysRemaining,
+          isValid: subscription.isValid()
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('[admin/deduct-days] 扣减时长失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '扣减时长失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 获取单个用户详情（管理员专用）
+ * GET /api/admin/user/:email
+ */
+router.get('/user/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    const user = await User.findOne({ email }).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+    
+    const subscription = await Subscription.findOne({ userId: user._id });
+    
+    // 计算剩余天数
+    let daysRemaining = 0;
+    if (subscription) {
+      const now = new Date();
+      daysRemaining = Math.max(0, Math.ceil((subscription.endDate - now) / (1000 * 60 * 60 * 24)));
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        user: user.toObject(),
+        subscription: subscription ? {
+          plan: subscription.plan,
+          maxDevices: subscription.maxDevices,
+          startDate: subscription.startDate,
+          endDate: subscription.endDate,
+          isActive: subscription.isActive,
+          isValid: subscription.isValid(),
+          daysRemaining: daysRemaining
+        } : null
+      }
+    });
+    
+  } catch (error) {
+    console.error('获取用户详情失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取用户详情失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
