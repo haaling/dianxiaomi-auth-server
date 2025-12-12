@@ -73,8 +73,8 @@ router.post('/create-user', async (req, res) => {
     // 根据 plan 参数确定订阅配置
     let subscriptionConfig = {
       plan: plan || 'free',
-      maxDevices: maxDevices || 3,
-      validDays: validDays || 30
+      maxDevices: maxDevices ?? 3,
+      validDays: validDays ?? 30
     };
     
     // 预设的套餐配置
@@ -89,8 +89,8 @@ router.post('/create-user', async (req, res) => {
     if (plan && planConfigs[plan]) {
       subscriptionConfig = {
         plan,
-        maxDevices: maxDevices || planConfigs[plan].maxDevices,
-        validDays: validDays || planConfigs[plan].validDays
+        maxDevices: maxDevices ?? planConfigs[plan].maxDevices,
+        validDays: validDays ?? planConfigs[plan].validDays
       };
     }
     
@@ -246,7 +246,7 @@ router.post('/renew-subscription', async (req, res) => {
     // 续期逻辑：endDate 往后延长 validDays 天，套餐可变更
     const now = new Date();
     const currentEnd = subscription.endDate > now ? subscription.endDate : now;
-    const days = validDays ? parseInt(validDays) : 30;
+    const days = validDays !== undefined && validDays !== null ? parseInt(validDays) : 30;
     
     subscription.endDate = new Date(currentEnd.getTime() + days * 24 * 60 * 60 * 1000);
     if (plan) subscription.plan = plan;
