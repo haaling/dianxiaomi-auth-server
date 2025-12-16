@@ -24,43 +24,21 @@ router.post('/register', authenticateToken, checkSubscription, checkDeviceLimit,
     });
     
     if (existingDevice) {
-      // 设备已存在，更新信息
-      existingDevice.lastActiveAt = new Date();
+      // 设备已存在（中间件已经处理了禁用其他设备和重新激活此设备）
+      // 这里只需要更新设备信息
       if (deviceName) existingDevice.deviceName = deviceName;
       if (deviceInfo) existingDevice.deviceInfo = deviceInfo;
-      if (!existingDevice.isActive) existingDevice.isActive = true;
       
       await existingDevice.save();
       
-      // 同一账号只允许一个设备登录：禁用该用户的其他所有设备
-      await Device.updateMany(
-        { 
-          userId: req.userId,
-          _id: { $ne: existingDevice._id }
-        },
-        { 
-          $set: { isActive: false }
-        }
-      );
-      
-      console.log(`[设备管理] 账号 ${req.userId} 在设备 ${deviceId} 登录，已禁用其他设备`);
-      
       return res.json({
         success: true,
-        message: '设备已存在，信息已更新',
+        message: '设备已存在，信息已更新。其他设备已被踢出',
         data: existingDevice
       });
     }
 
-    // 设备不存在，先禁用该用户的所有现有设备（同一账号只允许一个设备）
-    await Device.updateMany(
-      { userId: req.userId },
-      { $set: { isActive: false } }
-    );
-    
-    console.log(`[设备管理] 账号 ${req.userId} 登录新设备 ${deviceId}，已禁用所有旧设备`);
-
-    // 创建新设备记录
+    // 设备不存在，创建新设备记录（中间件已经禁用了其他设备）
     const device = new Device({
       userId: req.userId,
       deviceId,
@@ -72,7 +50,7 @@ router.post('/register', authenticateToken, checkSubscription, checkDeviceLimit,
 
     res.status(201).json({
       success: true,
-      message: '设备注册成功',
+      message: '设备注册成功，其他设备已被踢出',
       data: device
     });
   } catch (error) {
