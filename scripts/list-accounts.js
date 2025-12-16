@@ -22,7 +22,7 @@ async function listAccounts() {
     console.log('✅ 已连接到数据库\n');
 
     console.log('╔═══════════════════════════════════════════════════════╗');
-    console.log('║              店小蜜 - 客户账号列表                    ║');
+    console.log('║              店小秘 - 客户账号列表                    ║');
     console.log('╚═══════════════════════════════════════════════════════╝\n');
 
     const users = await User.find().sort({ createdAt: -1 });
