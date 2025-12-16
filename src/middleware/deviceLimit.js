@@ -25,22 +25,13 @@ const checkDeviceLimit = async (req, res, next) => {
       return next();
     }
 
-    // 检查当前活跃设备数量
-    const activeDeviceCount = await Device.countDocuments({ 
-      userId: req.userId,
-      isActive: true 
-    });
-
-    const maxDevices = req.subscription ? req.subscription.maxDevices : parseInt(process.env.MAX_DEVICES_PER_USER || 3);
-
-    if (activeDeviceCount >= maxDevices) {
-      return res.status(403).json({ 
-        success: false,
-        message: `已达到最大设备数量限制（${maxDevices}台）`,
-        maxDevices: maxDevices,
-        currentDevices: activeDeviceCount
-      });
-    }
+    // 新设备登录：将该用户的所有其他设备设为不活跃（踢出）
+    await Device.updateMany(
+      { userId: req.userId, deviceId: { $ne: deviceId } },
+      { $set: { isActive: false } }
+    );
+    
+    console.log(`[DeviceLimit] 新设备 ${deviceId} 登录，已踢出用户 ${req.userId} 的所有其他设备`);
 
     next();
   } catch (error) {

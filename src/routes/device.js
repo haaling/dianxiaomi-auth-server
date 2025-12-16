@@ -32,6 +32,19 @@ router.post('/register', authenticateToken, checkSubscription, checkDeviceLimit,
       
       await existingDevice.save();
       
+      // 同一账号只允许一个设备登录：禁用该用户的其他所有设备
+      await Device.updateMany(
+        { 
+          userId: req.userId,
+          _id: { $ne: existingDevice._id }
+        },
+        { 
+          $set: { isActive: false }
+        }
+      );
+      
+      console.log(`[设备管理] 账号 ${req.userId} 在设备 ${deviceId} 登录，已禁用其他设备`);
+      
       return res.json({
         success: true,
         message: '设备已存在，信息已更新',
@@ -39,8 +52,15 @@ router.post('/register', authenticateToken, checkSubscription, checkDeviceLimit,
       });
     }
 
-    // 设备不存在，创建新设备记录
-    // 注意：同一个 deviceId 可以对应多个用户（多账号登录）
+    // 设备不存在，先禁用该用户的所有现有设备（同一账号只允许一个设备）
+    await Device.updateMany(
+      { userId: req.userId },
+      { $set: { isActive: false } }
+    );
+    
+    console.log(`[设备管理] 账号 ${req.userId} 登录新设备 ${deviceId}，已禁用所有旧设备`);
+
+    // 创建新设备记录
     const device = new Device({
       userId: req.userId,
       deviceId,
