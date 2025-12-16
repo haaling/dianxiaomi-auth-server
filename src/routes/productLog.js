@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ProductLog = require('../models/ProductLog');
-const { authenticateToken } = require('../middleware/auth');
+const authenticateToken = require('../middleware/auth');
 
 // 记录产品操作日志
 router.post('/log', authenticateToken, async (req, res) => {
