@@ -13,6 +13,8 @@ const checkDeviceLimit = async (req, res, next) => {
     }
 
     // 同一账号只允许一个设备登录：禁用该用户的所有其他设备
+    console.log(`[DeviceLimit] 用户 ${req.userId} 的设备 ${deviceId} 正在登录...`);
+    
     const updateResult = await Device.updateMany(
       { 
         userId: req.userId, 
@@ -22,8 +24,16 @@ const checkDeviceLimit = async (req, res, next) => {
       { $set: { isActive: false } }
     );
     
+    console.log(`[DeviceLimit] 更新结果:`, {
+      matchedCount: updateResult.matchedCount,
+      modifiedCount: updateResult.modifiedCount,
+      acknowledged: updateResult.acknowledged
+    });
+    
     if (updateResult.modifiedCount > 0) {
-      console.log(`[DeviceLimit] 设备 ${deviceId} 登录，已踢出用户 ${req.userId} 的 ${updateResult.modifiedCount} 个其他设备`);
+      console.log(`[DeviceLimit] ✓ 设备 ${deviceId} 登录，已踢出用户 ${req.userId} 的 ${updateResult.modifiedCount} 个其他设备`);
+    } else {
+      console.log(`[DeviceLimit] 没有其他活跃设备需要踢出`);
     }
 
     // 检查设备是否已注册
