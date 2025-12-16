@@ -4,7 +4,12 @@ const productLogSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: false,
+    index: true
+  },
+  username: {
+    type: String,
+    trim: true,
     index: true
   },
   originalTitle: {
@@ -15,10 +20,6 @@ const productLogSchema = new mongoose.Schema({
   sourceUrl: {
     type: String,
     required: true,
-    trim: true
-  },
-  optimizedTitle: {
-    type: String,
     trim: true
   },
   action: {
@@ -35,6 +36,7 @@ const productLogSchema = new mongoose.Schema({
 
 // 创建复合索引用于查询优化
 productLogSchema.index({ userId: 1, createdAt: -1 });
+productLogSchema.index({ username: 1, createdAt: -1 });
 
 const ProductLog = mongoose.model('ProductLog', productLogSchema);
 
