@@ -31,6 +31,10 @@ const deviceSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  kickedOutAt: {
+    type: Date,
+    default: null  // 被踢出的时间，用于冷却时间检查
   }
 });
 
