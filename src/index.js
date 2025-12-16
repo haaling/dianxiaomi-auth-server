@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const subscriptionRoutes = require('./routes/subscription');
 const deviceRoutes = require('./routes/device');
 const adminRoutes = require('./routes/admin');
+const productLogRoutes = require('./routes/productLog');
 
 const app = express();
 
@@ -66,6 +67,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/device', require('./routes/device'));
 app.use('/api/subscription', require('./routes/subscription'));
 app.use('/api/features', require('./routes/features'));
+app.use('/api/product', productLogRoutes); // 产品日志路由
 app.use('/api/admin', adminRoutes); // 管理员路由（需要 API Key）
 
 // 健康检查
