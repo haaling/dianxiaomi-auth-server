@@ -1,7 +1,7 @@
 const Device = require('../models/Device');
 
 // 设备冷却时间（毫秒）
-const DEVICE_COOLDOWN = 10 * 60 * 1000; // 10分钟
+const DEVICE_COOLDOWN = 30 * 60 * 1000; // 30分钟
 
 // 检查设备数量限制
 const checkDeviceLimit = async (req, res, next) => {
