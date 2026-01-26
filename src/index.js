@@ -83,7 +83,7 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     success: true,
-    message: '点小蜜认证服务器 API',
+    message: '店小秘认证服务器 API',
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth',

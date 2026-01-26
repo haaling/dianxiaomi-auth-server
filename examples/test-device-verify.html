@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>设备活跃验证测试</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 24px; background: #f5f5f5; }
+    .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); max-width: 720px; }
+    h1 { font-size: 20px; margin-bottom: 12px; }
+    label { display: block; margin-top: 12px; font-size: 13px; color: #555; }
+    input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+    button { margin-top: 12px; padding: 10px 14px; border: none; border-radius: 4px; background: #1890ff; color: #fff; cursor: pointer; }
+    button.secondary { background: #52c41a; }
+    button.warn { background: #faad14; }
+    pre { background: #0b1020; color: #d6deeb; padding: 12px; border-radius: 6px; margin-top: 12px; font-size: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>设备活跃验证测试</h1>
+    <p>用于验证每 30 分钟设备活跃校验与 59 分钟冷却逻辑。</p>
+
+    <label>邮箱</label>
+    <input id="email" type="email" placeholder="user@example.com" />
+
+    <label>密码</label>
+    <input id="password" type="password" placeholder="password" />
+
+    <button id="loginBtn">登录并注册设备</button>
+    <button id="verifyBtn" class="secondary">强制验证设备</button>
+    <button id="statusBtn" class="warn">查看当前订阅/设备</button>
+
+    <pre id="output"></pre>
+  </div>
+
+  <script>
+    if (!window.chrome) window.chrome = {};
+    if (!window.chrome.storage) window.chrome.storage = {};
+    if (!window.chrome.storage.local) {
+      window.chrome.storage.local = {
+        get(keys, callback) {
+          const result = {};
+          if (Array.isArray(keys)) {
+            keys.forEach(key => {
+              const value = localStorage.getItem(key);
+              result[key] = value ? JSON.parse(value) : undefined;
+            });
+          } else if (typeof keys === 'string') {
+            const value = localStorage.getItem(keys);
+            result[keys] = value ? JSON.parse(value) : undefined;
+          } else if (typeof keys === 'object' && keys !== null) {
+            Object.keys(keys).forEach(key => {
+              const value = localStorage.getItem(key);
+              result[key] = value ? JSON.parse(value) : keys[key];
+            });
+          }
+          callback(result);
+        },
+        set(data, callback) {
+          Object.keys(data || {}).forEach(key => {
+            localStorage.setItem(key, JSON.stringify(data[key]));
+          });
+          if (callback) callback();
+        },
+        remove(keys, callback) {
+          if (Array.isArray(keys)) {
+            keys.forEach(key => localStorage.removeItem(key));
+          } else if (typeof keys === 'string') {
+            localStorage.removeItem(keys);
+          }
+          if (callback) callback();
+        }
+      };
+    }
+  </script>
+  <script src="../../dianxiaomi/utils/auth-config.js"></script>
+  <script src="../../dianxiaomi/utils/auth-service.js"></script>
+  <script>
+    const output = document.getElementById('output');
+    const authService = window.authService;
+    if (authService) {
+      authService.DEVICE_VERIFY_INTERVAL = 60 * 1000;
+    }
+
+    function log(data) {
+      output.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    }
+
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+      if (!email || !password) return log('请填写邮箱和密码');
+      const result = await authService.login(email, password);
+      log(result);
+    });
+
+    document.getElementById('verifyBtn').addEventListener('click', async () => {
+      const result = await authService.verifyActiveDeviceIfNeeded(true);
+      log(result);
+    });
+
+    setInterval(async () => {
+      if (!authService || !authService.token) return;
+      const result = await authService.verifyActiveDeviceIfNeeded();
+      if (result && result.success === false) {
+        log(result);
+      }
+    }, 60 * 1000);
+
+    document.getElementById('statusBtn').addEventListener('click', async () => {
+      const status = await authService.getUserStatus();
+      log(status);
+    });
+  </script>
+</body>
+</html>

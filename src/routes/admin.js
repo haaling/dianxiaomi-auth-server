@@ -382,6 +382,80 @@ router.post('/deduct-days', async (req, res) => {
 });
 
 /**
+ * 修改用户最大登录设备数（管理员专用）
+ * POST /api/admin/update-max-devices
+ * Headers: x-admin-api-key: your_api_key
+ * Body: { email, maxDevices }
+ */
+router.post('/update-max-devices', async (req, res) => {
+  try {
+    const { email, maxDevices } = req.body;
+
+    if (!email || maxDevices === undefined || maxDevices === null) {
+      return res.status(400).json({
+        success: false,
+        message: '邮箱和最大设备数是必填项'
+      });
+    }
+
+    const parsedMaxDevices = parseInt(maxDevices, 10);
+    if (isNaN(parsedMaxDevices) || parsedMaxDevices <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: '最大设备数必须是大于0的整数'
+      });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+
+    const subscription = await Subscription.findOne({ userId: user._id });
+    if (!subscription) {
+      return res.status(404).json({
+        success: false,
+        message: '该用户没有订阅记录'
+      });
+    }
+
+    subscription.maxDevices = parsedMaxDevices;
+    await subscription.save();
+
+    const now = new Date();
+    const daysRemaining = Math.max(0, Math.ceil((subscription.endDate - now) / (1000 * 60 * 60 * 24)));
+
+    return res.json({
+      success: true,
+      message: '最大设备数已更新',
+      data: {
+        user: {
+          email: user.email,
+          username: user.username
+        },
+        subscription: {
+          plan: subscription.plan,
+          maxDevices: subscription.maxDevices,
+          endDate: subscription.endDate,
+          daysRemaining,
+          isValid: subscription.isValid()
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[admin/update-max-devices] 更新失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '更新失败',
+      error: error.message
+    });
+  }
+});
+
+/**
  * 获取单个用户详情（管理员专用）
  * GET /api/admin/user/:email
  */

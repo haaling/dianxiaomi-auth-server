@@ -346,6 +346,7 @@
       <button class="tab active" data-tab="create">创建用户</button>
       <button class="tab" data-tab="renew">续期订阅</button>
       <button class="tab" data-tab="deduct">扣减时长</button>
+      <button class="tab" data-tab="devices">设备数调整</button>
       <button class="tab" data-tab="query">查询用户</button>
       <button class="tab" data-tab="list">用户列表</button>
     </div>
@@ -446,6 +447,27 @@
         </div>
       </div>
       <div id="deductResult" class="result-box hidden"></div>
+    </div>
+
+    <!-- 设备数调整 -->
+    <div id="devicesTab" class="tab-content">
+      <div class="form-section">
+        <h3>🧩 调整最大设备数</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>用户邮箱 *</label>
+            <input type="email" id="devicesEmail" placeholder="user@example.com">
+          </div>
+          <div class="form-group">
+            <label>最大设备数 *</label>
+            <input type="number" id="devicesMax" placeholder="例如 5" min="1">
+          </div>
+        </div>
+        <div style="margin-top: 15px;">
+          <button class="btn btn-primary" onclick="updateMaxDevices()">更新设备数</button>
+        </div>
+      </div>
+      <div id="devicesResult" class="result-box hidden"></div>
     </div>
     
     <!-- 查询用户 -->
@@ -639,6 +661,36 @@
         showResult('deductResult', data, !response.ok);
       } catch (error) {
         showResult('deductResult', { error: error.message }, true);
+      }
+    }
+
+    // 修改最大设备数
+    async function updateMaxDevices() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const email = document.getElementById('devicesEmail').value.trim();
+      const maxDevices = document.getElementById('devicesMax').value;
+
+      if (!email || !maxDevices) {
+        alert('请填写邮箱和最大设备数');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/update-max-devices`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify({ email, maxDevices: parseInt(maxDevices) })
+        });
+
+        const data = await response.json();
+        showResult('devicesResult', data, !response.ok);
+      } catch (error) {
+        showResult('devicesResult', { error: error.message }, true);
       }
     }
     
