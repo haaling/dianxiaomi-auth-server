@@ -12,10 +12,15 @@ const productLogSchema = new mongoose.Schema({
     trim: true,
     index: true
   },
-  originalTitle: {
+  chineseTitle: {
     type: String,
     required: true,
     trim: true
+  },
+  englishTitle: {
+    type: String,
+    trim: true,
+    default: null
   },
   storeName: {
     type: String,

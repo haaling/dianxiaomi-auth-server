@@ -645,7 +645,7 @@ router.get('/product-log-stats', async (req, res) => {
       ProductLog.find(matchCondition)
         .sort({ createdAt: -1 })
         .limit(10)
-        .select('originalTitle username loginAccount storeName action createdAt')
+        .select('chineseTitle englishTitle username loginAccount storeName sourceUrl action createdAt')
     ]);
 
     const stats = {

@@ -1001,7 +1001,7 @@
         }
 
         let html = '<table class="user-table"><thead><tr>';
-        html += '<th>时间</th><th>动作</th><th>插件用户</th><th>登录邮箱</th><th>店铺名</th><th>标题</th><th>链接</th>';
+        html += '<th>时间</th><th>动作</th><th>插件用户</th><th>登录邮箱</th><th>店铺名</th><th>中文名</th><th>英文名</th><th>链接</th>';
         html += '</tr></thead><tbody>';
 
         logs.forEach((log) => {
@@ -1011,7 +1011,8 @@
           html += `<td>${log.username || '-'}</td>`;
           html += `<td>${log.loginAccount || '-'}</td>`;
           html += `<td>${log.storeName || '-'}</td>`;
-          html += `<td title="${(log.originalTitle || '').replace(/"/g, '&quot;')}">${log.originalTitle || '-'}</td>`;
+          html += `<td title="${(log.chineseTitle || '').replace(/"/g, '&quot;')}">${log.chineseTitle || '-'}</td>`;
+          html += `<td title="${(log.englishTitle || '').replace(/"/g, '&quot;')}">${log.englishTitle || '-'}</td>`;
           html += `<td>${log.sourceUrl ? `<a href="${log.sourceUrl}" target="_blank" rel="noopener noreferrer">查看链接</a>` : '-'}</td>`;
           html += '</tr>';
         });
