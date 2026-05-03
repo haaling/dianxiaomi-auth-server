@@ -348,6 +348,7 @@
       <button class="tab" data-tab="deduct">扣减时长</button>
       <button class="tab" data-tab="devices">设备数调整</button>
       <button class="tab" data-tab="kick">测试踢登</button>
+      <button class="tab" data-tab="logs">日志查询</button>
       <button class="tab" data-tab="query">查询用户</button>
       <button class="tab" data-tab="list">用户列表</button>
     </div>
@@ -488,6 +489,47 @@
       </div>
       <div id="kickResult" class="result-box hidden"></div>
     </div>
+
+    <!-- 日志查询 -->
+    <div id="logsTab" class="tab-content">
+      <div class="form-section">
+        <h3>📋 产品日志查询</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>操作类型</label>
+            <select id="logActionFilter">
+              <option value="">全部</option>
+              <option value="optimizeTitle">optimizeTitle</option>
+              <option value="runAllSteps">runAllSteps</option>
+              <option value="runSelectedSteps">runSelectedSteps</option>
+              <option value="runTemplatePostSteps">runTemplatePostSteps</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>插件用户名</label>
+            <input type="text" id="logUsernameFilter" placeholder="例如 premium_user">
+          </div>
+          <div class="form-group">
+            <label>登录邮箱</label>
+            <input type="text" id="logLoginEmailFilter" placeholder="例如 test@example.com">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 15px;">
+          <button class="btn btn-primary" onclick="loadProductLogs()">查询日志</button>
+          <button class="btn btn-success" onclick="loadProductLogStats()">刷新统计</button>
+          <span style="color: #666; font-size: 13px;">每页显示 20 条</span>
+        </div>
+      </div>
+
+      <div id="productLogStats" class="stats-grid"></div>
+
+      <div class="form-section">
+        <h3>🕘 最近日志</h3>
+        <div id="productLogLoading" class="loading hidden">加载中...</div>
+        <div id="productLogContent"></div>
+        <div id="productLogPagination" class="pagination hidden"></div>
+      </div>
+    </div>
     
     <!-- 查询用户 -->
     <div id="queryTab" class="tab-content">
@@ -527,6 +569,8 @@
     
     let currentPage = 1;
     let totalPages = 1;
+    let currentLogPage = 1;
+    let totalLogPages = 1;
     
     // 标签页切换
     document.querySelectorAll('.tab').forEach(tab => {
@@ -546,6 +590,11 @@
         // 如果切换到用户列表，自动加载
         if (tabName === 'list') {
           loadUserList();
+        }
+
+        if (tabName === 'logs') {
+          loadProductLogStats();
+          loadProductLogs();
         }
       });
     });
@@ -842,6 +891,142 @@
           pagination.classList.remove('hidden');
         }
         
+      } catch (error) {
+        loading.classList.add('hidden');
+        content.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      }
+    }
+
+    function getLogFilters() {
+      return {
+        action: document.getElementById('logActionFilter').value,
+        username: document.getElementById('logUsernameFilter').value.trim(),
+        loginEmail: document.getElementById('logLoginEmailFilter').value.trim()
+      };
+    }
+
+    function buildLogQuery(params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.set(key, String(value));
+        }
+      });
+      return searchParams.toString();
+    }
+
+    async function loadProductLogStats() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const filters = getLogFilters();
+      const statsContainer = document.getElementById('productLogStats');
+      statsContainer.innerHTML = '<div class="loading">加载统计中...</div>';
+
+      try {
+        const query = buildLogQuery(filters);
+        const response = await fetch(`${API_BASE_URL}/admin/product-log-stats${query ? `?${query}` : ''}`, {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': apiKey
+          }
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          statsContainer.innerHTML = `<div class="result-box error">${JSON.stringify(result, null, 2)}</div>`;
+          return;
+        }
+
+        const data = result.data;
+        const actionSummary = Object.entries(data.byAction || {}).map(([key, value]) => `${key}: ${value}`).join('<br>') || '暂无数据';
+        const accountSummary = Object.entries(data.byLoginAccount || {}).slice(0, 5).map(([key, value]) => `${key}: ${value}`).join('<br>') || '暂无数据';
+
+        statsContainer.innerHTML = `
+          <div class="stat-card">
+            <h4>日志总数</h4>
+            <div class="value">${data.total || 0}</div>
+          </div>
+          <div class="stat-card">
+            <h4>按动作统计</h4>
+            <div style="font-size: 13px; line-height: 1.6;">${actionSummary}</div>
+          </div>
+          <div class="stat-card">
+            <h4>按登录邮箱统计</h4>
+            <div style="font-size: 13px; line-height: 1.6;">${accountSummary}</div>
+          </div>
+        `;
+      } catch (error) {
+        statsContainer.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      }
+    }
+
+    async function loadProductLogs(page = 1) {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const loading = document.getElementById('productLogLoading');
+      const content = document.getElementById('productLogContent');
+      const pagination = document.getElementById('productLogPagination');
+      const filters = getLogFilters();
+
+      loading.classList.remove('hidden');
+      content.innerHTML = '';
+      pagination.classList.add('hidden');
+
+      try {
+        const query = buildLogQuery({ ...filters, page, limit: 20 });
+        const response = await fetch(`${API_BASE_URL}/admin/product-logs?${query}`, {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': apiKey
+          }
+        });
+
+        const result = await response.json();
+        loading.classList.add('hidden');
+
+        if (!response.ok) {
+          content.innerHTML = `<div class="result-box error">${JSON.stringify(result, null, 2)}</div>`;
+          return;
+        }
+
+        const { logs, pagination: pag } = result.data;
+        currentLogPage = pag.page;
+        totalLogPages = pag.totalPages;
+
+        if (!logs.length) {
+          content.innerHTML = '<div class="loading">暂无日志数据</div>';
+          return;
+        }
+
+        let html = '<table class="user-table"><thead><tr>';
+        html += '<th>时间</th><th>动作</th><th>插件用户</th><th>登录邮箱</th><th>店铺名</th><th>标题</th><th>链接</th>';
+        html += '</tr></thead><tbody>';
+
+        logs.forEach((log) => {
+          html += '<tr>';
+          html += `<td>${new Date(log.createdAt).toLocaleString('zh-CN')}</td>`;
+          html += `<td><span class="badge badge-info">${log.action}</span></td>`;
+          html += `<td>${log.username || '-'}</td>`;
+          html += `<td>${log.loginAccount || '-'}</td>`;
+          html += `<td>${log.storeName || '-'}</td>`;
+          html += `<td title="${(log.originalTitle || '').replace(/"/g, '&quot;')}">${log.originalTitle || '-'}</td>`;
+          html += `<td>${log.sourceUrl ? `<a href="${log.sourceUrl}" target="_blank" rel="noopener noreferrer">查看链接</a>` : '-'}</td>`;
+          html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        content.innerHTML = html;
+
+        if (totalLogPages > 1) {
+          let pagHtml = '';
+          pagHtml += `<button class="btn btn-primary" ${currentLogPage === 1 ? 'disabled' : ''} onclick="loadProductLogs(${currentLogPage - 1})">上一页</button>`;
+          pagHtml += `<span>第 ${currentLogPage} / ${totalLogPages} 页</span>`;
+          pagHtml += `<button class="btn btn-primary" ${currentLogPage === totalLogPages ? 'disabled' : ''} onclick="loadProductLogs(${currentLogPage + 1})">下一页</button>`;
+          pagination.innerHTML = pagHtml;
+          pagination.classList.remove('hidden');
+        }
       } catch (error) {
         loading.classList.add('hidden');
         content.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;

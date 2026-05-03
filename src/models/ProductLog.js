@@ -17,6 +17,17 @@ const productLogSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  storeName: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  loginAccount: {
+    type: String,
+    trim: true,
+    index: true,
+    default: null
+  },
   sourceUrl: {
     type: String,
     required: true,
@@ -24,7 +35,7 @@ const productLogSchema = new mongoose.Schema({
   },
   action: {
     type: String,
-    enum: ['optimizeTitle', 'runAllSteps', 'runSelectedSteps'],
+    enum: ['optimizeTitle', 'runAllSteps', 'runSelectedSteps', 'runTemplatePostSteps'],
     required: true
   },
   createdAt: {
@@ -37,6 +48,7 @@ const productLogSchema = new mongoose.Schema({
 // 创建复合索引用于查询优化
 productLogSchema.index({ userId: 1, createdAt: -1 });
 productLogSchema.index({ username: 1, createdAt: -1 });
+productLogSchema.index({ loginAccount: 1, createdAt: -1 });
 
 const ProductLog = mongoose.model('ProductLog', productLogSchema);
 

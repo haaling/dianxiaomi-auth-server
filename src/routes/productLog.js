@@ -28,7 +28,7 @@ const optionalAuth = async (req, res, next) => {
 // 记录产品操作日志（公开接口，可选登录）
 router.post('/log', optionalAuth, async (req, res) => {
   try {
-    const { originalTitle, sourceUrl, action } = req.body;
+    const { originalTitle, sourceUrl, action, storeName, loginAccount } = req.body;
 
     // 验证必填字段
     if (!originalTitle || !sourceUrl || !action) {
@@ -39,7 +39,7 @@ router.post('/log', optionalAuth, async (req, res) => {
     }
 
     // 验证 action 类型
-    const validActions = ['optimizeTitle', 'runAllSteps', 'runSelectedSteps'];
+    const validActions = ['optimizeTitle', 'runAllSteps', 'runSelectedSteps', 'runTemplatePostSteps'];
     if (!validActions.includes(action)) {
       return res.status(400).json({
         success: false,
@@ -52,6 +52,8 @@ router.post('/log', optionalAuth, async (req, res) => {
       userId: req.user ? req.user._id : null,
       username: req.user ? req.user.username : null,
       originalTitle,
+      storeName: storeName || null,
+      loginAccount: loginAccount || req.user?.email || req.user?.username || null,
       sourceUrl,
       action
     });
@@ -166,7 +168,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
       ProductLog.find(matchCondition)
         .sort({ createdAt: -1 })
         .limit(10)
-        .select('originalTitle username action createdAt')
+        .select('originalTitle username loginAccount storeName action createdAt')
     ]);
 
     // 格式化统计数据

@@ -9,6 +9,7 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Subscription = require('../models/Subscription');
 const Device = require('../models/Device');
+const ProductLog = require('../models/ProductLog');
 const adminAuth = require('../middleware/adminAuth');
 
 // 所有管理员路由都需要 API Key 认证
@@ -564,6 +565,113 @@ router.post('/kick-user', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: '踢登失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 获取产品日志（管理员专用）
+ * GET /api/admin/product-logs?page=1&limit=20&action=&username=&loginEmail=
+ */
+router.get('/product-logs', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, action, username, loginEmail, loginAccount } = req.query;
+    const parsedPage = parseInt(page, 10) || 1;
+    const parsedLimit = parseInt(limit, 10) || 20;
+    const skip = (parsedPage - 1) * parsedLimit;
+    const loginEmailFilter = loginEmail || loginAccount;
+
+    const query = {};
+    if (action) query.action = action;
+    if (username) query.username = username;
+    if (loginEmailFilter) query.loginAccount = loginEmailFilter;
+
+    const [logs, total] = await Promise.all([
+      ProductLog.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parsedLimit)
+        .select('-__v'),
+      ProductLog.countDocuments(query)
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        logs,
+        pagination: {
+          page: parsedPage,
+          limit: parsedLimit,
+          total,
+          totalPages: Math.ceil(total / parsedLimit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[admin/product-logs] 获取失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '获取产品日志失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 获取产品日志统计（管理员专用）
+ * GET /api/admin/product-log-stats?username=&loginEmail=
+ */
+router.get('/product-log-stats', async (req, res) => {
+  try {
+    const { username, loginEmail, loginAccount } = req.query;
+    const loginEmailFilter = loginEmail || loginAccount;
+    const matchCondition = {};
+    if (username) matchCondition.username = username;
+    if (loginEmailFilter) matchCondition.loginAccount = loginEmailFilter;
+
+    const [totalLogs, actionStats, accountStats, recentLogs] = await Promise.all([
+      ProductLog.countDocuments(matchCondition),
+      ProductLog.aggregate([
+        { $match: matchCondition },
+        { $group: { _id: '$action', count: { $sum: 1 } } }
+      ]),
+      ProductLog.aggregate([
+        { $match: matchCondition },
+        { $group: { _id: '$loginAccount', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ]),
+      ProductLog.find(matchCondition)
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select('originalTitle username loginAccount storeName action createdAt')
+    ]);
+
+    const stats = {
+      total: totalLogs,
+      byAction: {},
+      byLoginAccount: {},
+      recentActivities: recentLogs
+    };
+
+    actionStats.forEach((stat) => {
+      stats.byAction[stat._id] = stat.count;
+    });
+
+    accountStats.forEach((stat) => {
+      stats.byLoginAccount[stat._id || '匿名'] = stat.count;
+    });
+
+    return res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('[admin/product-log-stats] 获取失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '获取产品日志统计失败',
       error: error.message
     });
   }
