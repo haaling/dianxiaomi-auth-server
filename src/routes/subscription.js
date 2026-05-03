@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Subscription = require('../models/Subscription');
 const authenticateToken = require('../middleware/auth');
+const {
+  getLatestSubscription,
+  normalizeSubscriptionState
+} = require('../utils/subscription');
 
 // 获取当前订阅信息
 router.get('/current', authenticateToken, async (req, res) => {
@@ -102,12 +106,10 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
 // 检查订阅状态
 router.get('/status', authenticateToken, async (req, res) => {
   try {
-    const subscription = await Subscription.findOne({ 
-      userId: req.userId,
-      isActive: true 
-    }).sort({ endDate: -1 });
+    const latestSubscription = await getLatestSubscription(req.userId);
+    const subscriptionState = await normalizeSubscriptionState(latestSubscription);
 
-    if (!subscription) {
+    if (!subscriptionState.hasSubscription) {
       return res.json({ 
         success: true,
         data: {
@@ -117,22 +119,16 @@ router.get('/status', authenticateToken, async (req, res) => {
       });
     }
 
-    const isValid = subscription.isValid();
-    
-    // 如果订阅过期，更新状态
-    if (!isValid && subscription.isActive) {
-      subscription.isActive = false;
-      await subscription.save();
-    }
+    const subscription = subscriptionState.subscription;
 
     res.json({
       success: true,
       data: {
         hasSubscription: true,
-        isValid,
+        isValid: subscriptionState.isValid,
         plan: subscription.plan,
         endDate: subscription.endDate,
-        daysRemaining: Math.ceil((subscription.endDate - Date.now()) / (1000 * 60 * 60 * 24))
+        daysRemaining: subscriptionState.daysRemaining
       }
     });
   } catch (error) {

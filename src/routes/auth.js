@@ -2,7 +2,10 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const Subscription = require('../models/Subscription');
+const {
+  getLatestSubscription,
+  normalizeSubscriptionState
+} = require('../utils/subscription');
 
 // 生成JWT Token
 const generateToken = (userId) => {
@@ -138,34 +141,41 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    const latestSubscription = await getLatestSubscription(user._id);
+    const subscriptionState = await normalizeSubscriptionState(latestSubscription);
+
+    if (!subscriptionState.hasSubscription) {
+      return res.status(403).json({
+        success: false,
+        message: '当前账号没有可用订阅，无法登录',
+        reasonCode: 'SUBSCRIPTION_REQUIRED'
+      });
+    }
+
+    if (!subscriptionState.isValid || subscriptionState.daysRemaining <= 0) {
+      return res.status(403).json({
+        success: false,
+        message: '订阅已过期，请续费后再登录',
+        reasonCode: 'SUBSCRIPTION_EXPIRED',
+        daysRemaining: 0
+      });
+    }
+
     // 更新最后登录时间
     user.lastLoginAt = Date.now();
     await user.save();
 
-    // 获取订阅信息
-    const subscription = await Subscription.findOne({ 
-      userId: user._id,
-      isActive: true 
-    }).sort({ endDate: -1 });
-
     // 生成Token
     const token = generateToken(user._id);
 
-    // 计算剩余天数
-    let subscriptionData = null;
-    if (subscription) {
-      const now = new Date();
-      const endDate = new Date(subscription.endDate);
-      const daysRemaining = Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
-      
-      subscriptionData = {
-        plan: subscription.plan,
-        maxDevices: subscription.maxDevices,
-        endDate: subscription.endDate,
-        isValid: subscription.isValid(),
-        daysRemaining: daysRemaining
-      };
-    }
+    const subscription = subscriptionState.subscription;
+    const subscriptionData = {
+      plan: subscription.plan,
+      maxDevices: subscription.maxDevices,
+      endDate: subscription.endDate,
+      isValid: true,
+      daysRemaining: subscriptionState.daysRemaining
+    };
 
     res.json({
       success: true,

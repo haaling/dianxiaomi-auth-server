@@ -166,14 +166,28 @@ router.post('/verify', authenticateToken, checkSubscription, async (req, res) =>
 
     const device = await Device.findOne({ 
       userId: req.userId,
-      deviceId,
-      isActive: true 
+      deviceId
     });
 
     if (!device) {
       return res.status(404).json({ 
         success: false,
         message: '设备未注册或已下线',
+        reasonCode: 'DEVICE_NOT_REGISTERED',
+        needsRegistration: true
+      });
+    }
+
+    if (!device.isActive) {
+      const kickedMessage = device.kickedOutAt
+        ? '当前账号已在其他设备登录，或已被管理员踢下线'
+        : '当前设备已下线，请重新登录';
+
+      return res.status(403).json({
+        success: false,
+        message: kickedMessage,
+        reasonCode: 'DEVICE_KICKED',
+        kickedOutAt: device.kickedOutAt,
         needsRegistration: true
       });
     }
@@ -181,11 +195,6 @@ router.post('/verify', authenticateToken, checkSubscription, async (req, res) =>
     // 更新设备活跃时间
     await device.updateActivity();
 
-    // 计算剩余天数
-    const now = new Date();
-    const endDate = new Date(req.subscription.endDate);
-    const daysRemaining = Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
-    
     res.json({
       success: true,
       message: 'Token有效',
@@ -193,10 +202,10 @@ router.post('/verify', authenticateToken, checkSubscription, async (req, res) =>
         device: device,
         subscription: {
           plan: req.subscription.plan,
-          isValid: req.subscription.isValid(),
+          isValid: true,
           endDate: req.subscription.endDate,
           maxDevices: req.subscription.maxDevices,
-          daysRemaining: daysRemaining
+          daysRemaining: req.subscriptionDaysRemaining
         }
       }
     });

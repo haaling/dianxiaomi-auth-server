@@ -8,6 +8,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Subscription = require('../models/Subscription');
+const Device = require('../models/Device');
 const adminAuth = require('../middleware/adminAuth');
 
 // 所有管理员路由都需要 API Key 认证
@@ -250,6 +251,7 @@ router.post('/renew-subscription', async (req, res) => {
     
     subscription.endDate = new Date(currentEnd.getTime() + days * 24 * 60 * 60 * 1000);
     if (plan) subscription.plan = plan;
+    subscription.isActive = true;
     
     await subscription.save();
     
@@ -501,6 +503,67 @@ router.get('/user/:email', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取用户详情失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 踢下线用户所有活跃设备（管理员专用）
+ * POST /api/admin/kick-user
+ * Headers: x-admin-api-key: your_api_key
+ * Body: { email }
+ */
+router.post('/kick-user', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: '邮箱是必填项'
+      });
+    }
+
+    const user = await User.findOne({ email }).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+
+    const kickedOutAt = new Date();
+    const updateResult = await Device.updateMany(
+      {
+        userId: user._id,
+        isActive: true
+      },
+      {
+        $set: {
+          isActive: false,
+          kickedOutAt
+        }
+      }
+    );
+
+    return res.json({
+      success: true,
+      message: updateResult.modifiedCount > 0 ? '已踢下线该账号的所有在线设备' : '该账号当前没有在线设备',
+      data: {
+        user: {
+          email: user.email,
+          username: user.username
+        },
+        kickedDevices: updateResult.modifiedCount,
+        kickedOutAt
+      }
+    });
+  } catch (error) {
+    console.error('[admin/kick-user] 踢登失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '踢登失败',
       error: error.message
     });
   }

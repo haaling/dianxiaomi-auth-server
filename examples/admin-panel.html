@@ -347,6 +347,7 @@
       <button class="tab" data-tab="renew">续期订阅</button>
       <button class="tab" data-tab="deduct">扣减时长</button>
       <button class="tab" data-tab="devices">设备数调整</button>
+      <button class="tab" data-tab="kick">测试踢登</button>
       <button class="tab" data-tab="query">查询用户</button>
       <button class="tab" data-tab="list">用户列表</button>
     </div>
@@ -468,6 +469,24 @@
         </div>
       </div>
       <div id="devicesResult" class="result-box hidden"></div>
+    </div>
+
+    <!-- 测试踢登 -->
+    <div id="kickTab" class="tab-content">
+      <div class="form-section">
+        <h3>🧪 测试踢登账号</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>用户邮箱 *</label>
+            <input type="email" id="kickEmail" placeholder="user@example.com">
+            <small>会将该账号当前所有在线设备强制下线</small>
+          </div>
+        </div>
+        <div style="margin-top: 15px;">
+          <button class="btn btn-danger" onclick="kickUser()">执行踢登</button>
+        </div>
+      </div>
+      <div id="kickResult" class="result-box hidden"></div>
     </div>
     
     <!-- 查询用户 -->
@@ -691,6 +710,39 @@
         showResult('devicesResult', data, !response.ok);
       } catch (error) {
         showResult('devicesResult', { error: error.message }, true);
+      }
+    }
+
+    // 踢下线账号
+    async function kickUser() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const email = document.getElementById('kickEmail').value.trim();
+
+      if (!email) {
+        alert('请填写要踢登的用户邮箱');
+        return;
+      }
+
+      if (!confirm(`确定要踢下线账号 ${email} 的所有在线设备吗？`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/kick-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify({ email })
+        });
+
+        const data = await response.json();
+        showResult('kickResult', data, !response.ok);
+      } catch (error) {
+        showResult('kickResult', { error: error.message }, true);
       }
     }
     
