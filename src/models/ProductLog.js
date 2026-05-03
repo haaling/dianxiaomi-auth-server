@@ -12,6 +12,11 @@ const productLogSchema = new mongoose.Schema({
     trim: true,
     index: true
   },
+  originalTitle: {
+    type: String,
+    trim: true,
+    default: null
+  },
   chineseTitle: {
     type: String,
     required: true,

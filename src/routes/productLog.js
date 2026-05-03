@@ -28,13 +28,14 @@ const optionalAuth = async (req, res, next) => {
 // 记录产品操作日志（公开接口，可选登录）
 router.post('/log', optionalAuth, async (req, res) => {
   try {
-    const { chineseTitle, englishTitle, sourceUrl, action, storeName, loginAccount } = req.body;
+    const { chineseTitle, englishTitle, originalTitle, sourceUrl, action, storeName, loginAccount } = req.body;
+    const normalizedChineseTitle = chineseTitle || originalTitle;
 
     // 验证必填字段
-    if (!chineseTitle || !sourceUrl || !action) {
+    if (!normalizedChineseTitle || !sourceUrl || !action) {
       return res.status(400).json({
         success: false,
-        message: '缺少必填字段：chineseTitle, sourceUrl, action'
+        message: '缺少必填字段：chineseTitle/sourceUrl/action'
       });
     }
 
@@ -51,7 +52,8 @@ router.post('/log', optionalAuth, async (req, res) => {
     const productLog = new ProductLog({
       userId: req.user ? req.user._id : null,
       username: req.user ? req.user.username : null,
-      chineseTitle,
+      originalTitle: originalTitle || normalizedChineseTitle,
+      chineseTitle: normalizedChineseTitle,
       englishTitle: englishTitle || null,
       storeName: storeName || null,
       loginAccount: loginAccount || req.user?.email || req.user?.username || null,
