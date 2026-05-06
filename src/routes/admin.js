@@ -295,6 +295,67 @@ router.post('/renew-subscription', async (req, res) => {
 });
 
 /**
+ * 修改用户密码（管理员专用）
+ * POST /api/admin/update-password
+ * Headers: x-admin-api-key: your_api_key
+ * Body: { email, newPassword }
+ */
+router.post('/update-password', async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: '邮箱和新密码是必填项'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: '新密码长度至少为 6 位'
+      });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    console.log('管理员修改用户密码成功:', {
+      userId: user._id,
+      email: user.email,
+      updatedAt: new Date().toISOString()
+    });
+
+    return res.json({
+      success: true,
+      message: '密码修改成功',
+      data: {
+        user: {
+          email: user.email,
+          username: user.username
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[admin/update-password] 修改密码失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '修改密码失败',
+      error: error.message
+    });
+  }
+});
+
+/**
  * 扣减用户订阅时长（管理员专用）
  * POST /api/admin/deduct-days
  * Headers: x-admin-api-key: your_api_key

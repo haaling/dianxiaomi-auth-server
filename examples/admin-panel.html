@@ -345,6 +345,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="create">创建用户</button>
       <button class="tab" data-tab="renew">续期订阅</button>
+      <button class="tab" data-tab="password">修改密码</button>
       <button class="tab" data-tab="deduct">扣减时长</button>
       <button class="tab" data-tab="devices">设备数调整</button>
       <button class="tab" data-tab="kick">测试踢登</button>
@@ -427,6 +428,28 @@
         </div>
       </div>
       <div id="renewResult" class="result-box hidden"></div>
+    </div>
+
+    <!-- 修改密码 -->
+    <div id="passwordTab" class="tab-content">
+      <div class="form-section">
+        <h3>🔑 修改用户密码</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>用户邮箱 *</label>
+            <input type="email" id="passwordEmail" placeholder="user@example.com">
+          </div>
+          <div class="form-group">
+            <label>新密码 *</label>
+            <input type="password" id="newPassword" placeholder="至少 6 位">
+            <small>修改后用户需要使用新密码重新登录</small>
+          </div>
+        </div>
+        <div style="margin-top: 15px;">
+          <button class="btn btn-warning" onclick="updatePassword()">修改密码</button>
+        </div>
+      </div>
+      <div id="passwordResult" class="result-box hidden"></div>
     </div>
     
     <!-- 扣减时长 -->
@@ -696,6 +719,48 @@
         showResult('renewResult', data, !response.ok);
       } catch (error) {
         showResult('renewResult', { error: error.message }, true);
+      }
+    }
+
+    async function updatePassword() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const email = document.getElementById('passwordEmail').value.trim();
+      const newPassword = document.getElementById('newPassword').value.trim();
+
+      if (!email || !newPassword) {
+        alert('请填写邮箱和新密码');
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        alert('新密码长度至少为 6 位');
+        return;
+      }
+
+      if (!confirm(`确定要修改用户 ${email} 的密码吗？`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/update-password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify({ email, newPassword })
+        });
+
+        const data = await response.json();
+        showResult('passwordResult', data, !response.ok);
+
+        if (response.ok) {
+          document.getElementById('newPassword').value = '';
+        }
+      } catch (error) {
+        showResult('passwordResult', { error: error.message }, true);
       }
     }
     
