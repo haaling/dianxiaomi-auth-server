@@ -480,11 +480,12 @@
           <div class="form-group">
             <label>用户邮箱 *</label>
             <input type="email" id="kickEmail" placeholder="user@example.com">
-            <small>会将该账号当前所有在线设备强制下线</small>
+            <small>会将该账号当前所有在线设备强制下线，也可以清空踢登后的冷却时间</small>
           </div>
         </div>
-        <div style="margin-top: 15px;">
+        <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
           <button class="btn btn-danger" onclick="kickUser()">执行踢登</button>
+          <button class="btn btn-warning" onclick="clearKickCooldown()">清空冷却期</button>
         </div>
       </div>
       <div id="kickResult" class="result-box hidden"></div>
@@ -780,6 +781,38 @@
 
       try {
         const response = await fetch(`${API_BASE_URL}/admin/kick-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify({ email })
+        });
+
+        const data = await response.json();
+        showResult('kickResult', data, !response.ok);
+      } catch (error) {
+        showResult('kickResult', { error: error.message }, true);
+      }
+    }
+
+    async function clearKickCooldown() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const email = document.getElementById('kickEmail').value.trim();
+
+      if (!email) {
+        alert('请填写要清空冷却期的用户邮箱');
+        return;
+      }
+
+      if (!confirm(`确定要清空账号 ${email} 的踢登冷却期吗？`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/clear-kick-cooldown`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -571,6 +571,64 @@ router.post('/kick-user', async (req, res) => {
 });
 
 /**
+ * 清空用户设备踢登冷却时间（管理员专用）
+ * POST /api/admin/clear-kick-cooldown
+ * Headers: x-admin-api-key: your_api_key
+ * Body: { email }
+ */
+router.post('/clear-kick-cooldown', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: '邮箱是必填项'
+      });
+    }
+
+    const user = await User.findOne({ email }).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+
+    const updateResult = await Device.updateMany(
+      {
+        userId: user._id,
+        kickedOutAt: { $ne: null }
+      },
+      {
+        $set: {
+          kickedOutAt: null
+        }
+      }
+    );
+
+    return res.json({
+      success: true,
+      message: updateResult.modifiedCount > 0 ? '已清空该账号设备的踢登冷却时间' : '该账号当前没有需要清空的冷却时间',
+      data: {
+        user: {
+          email: user.email,
+          username: user.username
+        },
+        clearedDevices: updateResult.modifiedCount
+      }
+    });
+  } catch (error) {
+    console.error('[admin/clear-kick-cooldown] 清空冷却期失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '清空冷却期失败',
+      error: error.message
+    });
+  }
+});
+
+/**
  * 获取产品日志（管理员专用）
  * GET /api/admin/product-logs?page=1&limit=20&action=&username=&loginEmail=
  */
