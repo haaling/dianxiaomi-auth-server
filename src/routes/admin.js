@@ -19,11 +19,11 @@ router.use(adminAuth);
  * 创建用户账号（管理员专用）
  * POST /api/admin/create-user
  * Headers: x-admin-api-key: your_api_key
- * Body: { username, email, password, plan?, maxDevices?, validDays? }
+ * Body: { username, email, password, plan?, maxDevices?, validDays?, income? }
  */
 router.post('/create-user', async (req, res) => {
   try {
-    const { username, email, password, plan, maxDevices, validDays } = req.body;
+    const { username, email, password, plan, maxDevices, validDays, income } = req.body;
     
     // 验证必填字段
     if (!username || !email || !password) {
@@ -49,6 +49,14 @@ router.post('/create-user', async (req, res) => {
         message: '密码长度至少为 6 位'
       });
     }
+
+    const parsedIncome = income === undefined || income === null || income === '' ? 0 : Number(income);
+    if (!Number.isFinite(parsedIncome) || parsedIncome < 0) {
+      return res.status(400).json({
+        success: false,
+        message: '收入必须是大于等于 0 的数字'
+      });
+    }
     
     // 检查用户是否已存在
     const existingUser = await User.findOne({
@@ -67,7 +75,8 @@ router.post('/create-user', async (req, res) => {
       username,
       email,
       password,  // 直接传入明文密码，让模型自己加密
-      isActive: true
+      isActive: true,
+      income: parsedIncome
     });
     
     await user.save();
@@ -115,6 +124,7 @@ router.post('/create-user', async (req, res) => {
       userId: user._id,
       email: user.email,
       plan: subscriptionConfig.plan,
+      income: user.income,
       createdAt: new Date().toISOString()
     });
     
@@ -130,6 +140,7 @@ router.post('/create-user', async (req, res) => {
           id: user._id,
           username: user.username,
           email: user.email,
+          income: user.income,
           isActive: user.isActive,
           createdAt: user.createdAt
         },
@@ -172,6 +183,15 @@ router.get('/users', async (req, res) => {
       .limit(limit);
     
     const total = await User.countDocuments();
+    const totalRevenueAgg = await User.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$income' }
+        }
+      }
+    ]);
+    const totalRevenue = totalRevenueAgg[0]?.totalRevenue || 0;
     
     // 获取每个用户的订阅信息
     const usersWithSubscription = await Promise.all(
@@ -193,6 +213,9 @@ router.get('/users', async (req, res) => {
       success: true,
       data: {
         users: usersWithSubscription,
+        stats: {
+          totalRevenue
+        },
         pagination: {
           page,
           limit,
@@ -207,6 +230,93 @@ router.get('/users', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取用户列表失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 营收统计（管理员专用）
+ * GET /api/admin/revenue-stats?range=today|month|all|custom&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ */
+router.get('/revenue-stats', async (req, res) => {
+  try {
+    const { range = 'month', startDate, endDate } = req.query;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const parseDate = (value, fallback) => {
+      if (!value) return fallback;
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? fallback : date;
+    };
+
+    let customStart = parseDate(startDate, null);
+    let customEnd = parseDate(endDate, null);
+    if (customEnd) {
+      customEnd.setHours(23, 59, 59, 999);
+    }
+
+    const resolveFilter = () => {
+      if (range === 'today') {
+        return { createdAt: { $gte: todayStart, $lte: now } };
+      }
+      if (range === 'month') {
+        return { createdAt: { $gte: monthStart, $lte: now } };
+      }
+      if (range === 'custom') {
+        if (!customStart || !customEnd) {
+          return null;
+        }
+        return { createdAt: { $gte: customStart, $lte: customEnd } };
+      }
+      return {};
+    };
+
+    const selectedFilter = resolveFilter();
+    if (range === 'custom' && !selectedFilter) {
+      return res.status(400).json({
+        success: false,
+        message: '自定义区间需提供有效的 startDate 和 endDate'
+      });
+    }
+
+    const sumIncome = async (filter) => {
+      const result = await User.aggregate([
+        { $match: filter },
+        { $group: { _id: null, total: { $sum: '$income' } } }
+      ]);
+      return result[0]?.total || 0;
+    };
+
+    const [selectedRevenue, todayRevenue, monthRevenue, allRevenue, paidUserCount] = await Promise.all([
+      sumIncome(selectedFilter),
+      sumIncome({ createdAt: { $gte: todayStart, $lte: now } }),
+      sumIncome({ createdAt: { $gte: monthStart, $lte: now } }),
+      sumIncome({}),
+      User.countDocuments({ income: { $gt: 0 } })
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        range,
+        selectedRevenue,
+        todayRevenue,
+        monthRevenue,
+        allRevenue,
+        paidUserCount,
+        startDate: customStart,
+        endDate: customEnd
+      }
+    });
+  } catch (error) {
+    console.error('[admin/revenue-stats] 获取营收统计失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '获取营收统计失败',
       error: error.message
     });
   }

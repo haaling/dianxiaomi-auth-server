@@ -390,6 +390,11 @@
             <input type="number" id="createValidDays" placeholder="默认根据套餐">
             <small>留空则使用套餐默认值</small>
           </div>
+          <div class="form-group">
+            <label>收入（可选）</label>
+            <input type="number" id="createIncome" min="0" step="0.01" placeholder="默认 0">
+            <small>用于营收统计，留空自动按 0 处理</small>
+          </div>
         </div>
         <div style="margin-top: 15px;">
           <button class="btn btn-primary" onclick="createUser()">创建用户</button>
@@ -576,6 +581,29 @@
     <div id="listTab" class="tab-content">
       <div class="form-section">
         <h3>👥 用户列表</h3>
+        <div class="form-grid" style="margin-bottom: 12px;">
+          <div class="form-group">
+            <label>营收统计区间</label>
+            <select id="revenueRange">
+              <option value="month" selected>本月</option>
+              <option value="today">今日</option>
+              <option value="all">累计</option>
+              <option value="custom">自定义</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>开始日期</label>
+            <input type="date" id="revenueStartDate">
+          </div>
+          <div class="form-group">
+            <label>结束日期</label>
+            <input type="date" id="revenueEndDate">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+          <button class="btn btn-success" onclick="loadRevenueStats()">刷新营收统计</button>
+        </div>
+        <div id="revenueStats" class="stats-grid"></div>
         <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
           <button class="btn btn-primary" onclick="loadUserList()">刷新列表</button>
           <span style="color: #666; font-size: 13px;">每页显示 20 条</span>
@@ -613,6 +641,7 @@
         
         // 如果切换到用户列表，自动加载
         if (tabName === 'list') {
+          loadRevenueStats();
           loadUserList();
         }
 
@@ -640,6 +669,65 @@
       resultBox.textContent = JSON.stringify(data, null, 2);
       resultBox.classList.remove('hidden');
     }
+
+    async function loadRevenueStats() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const container = document.getElementById('revenueStats');
+      const range = document.getElementById('revenueRange').value;
+      const startDate = document.getElementById('revenueStartDate').value;
+      const endDate = document.getElementById('revenueEndDate').value;
+
+      const query = new URLSearchParams({ range });
+      if (range === 'custom') {
+        if (!startDate || !endDate) {
+          alert('自定义区间请填写开始和结束日期');
+          return;
+        }
+        query.set('startDate', startDate);
+        query.set('endDate', endDate);
+      }
+
+      container.innerHTML = '<div class="loading">加载营收统计中...</div>';
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/revenue-stats?${query.toString()}`, {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': apiKey
+          }
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          container.innerHTML = `<div class="result-box error">${JSON.stringify(result, null, 2)}</div>`;
+          return;
+        }
+
+        const data = result.data;
+        container.innerHTML = `
+          <div class="stat-card">
+            <h4>当前区间营收</h4>
+            <div class="value">¥${Number(data.selectedRevenue || 0).toFixed(2)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>今日营收</h4>
+            <div class="value">¥${Number(data.todayRevenue || 0).toFixed(2)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>本月营收</h4>
+            <div class="value">¥${Number(data.monthRevenue || 0).toFixed(2)}</div>
+          </div>
+          <div class="stat-card">
+            <h4>累计营收 / 付费用户</h4>
+            <div style="font-size: 22px; font-weight: bold; line-height: 1.5;">¥${Number(data.allRevenue || 0).toFixed(2)} / ${data.paidUserCount || 0}</div>
+          </div>
+        `;
+      } catch (error) {
+        container.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      }
+    }
     
     // 创建用户
     async function createUser() {
@@ -652,6 +740,7 @@
       const plan = document.getElementById('createPlan').value;
       const maxDevices = document.getElementById('createMaxDevices').value;
       const validDays = document.getElementById('createValidDays').value;
+      const income = document.getElementById('createIncome').value;
       
       if (!username || !email || !password) {
         alert('请填写用户名、邮箱和密码');
@@ -661,6 +750,7 @@
       const body = { username, email, password, plan };
       if (maxDevices) body.maxDevices = parseInt(maxDevices);
       if (validDays) body.validDays = parseInt(validDays);
+      if (income) body.income = parseFloat(income);
       
       try {
         const response = await fetch(`${API_BASE_URL}/admin/create-user`, {
@@ -682,6 +772,7 @@
           document.getElementById('createPassword').value = '';
           document.getElementById('createMaxDevices').value = '';
           document.getElementById('createValidDays').value = '';
+          document.getElementById('createIncome').value = '';
         }
       } catch (error) {
         showResult('createResult', { error: error.message }, true);
@@ -949,13 +1040,15 @@
           return;
         }
         
-        const { users, pagination: pag } = result.data;
+        const { users, stats, pagination: pag } = result.data;
         currentPage = pag.page;
         totalPages = pag.pages;
         
         // 渲染表格
-        let html = '<table class="user-table"><thead><tr>';
-        html += '<th>用户名</th><th>邮箱</th><th>套餐</th><th>剩余天数</th><th>最大设备</th><th>到期时间</th><th>状态</th>';
+        const totalRevenue = Number(stats?.totalRevenue || 0);
+        let html = `<div style="margin-bottom: 12px; color: #333; font-weight: 600;">总营收: ¥${totalRevenue.toFixed(2)}</div>`;
+        html += '<table class="user-table"><thead><tr>';
+        html += '<th>用户名</th><th>邮箱</th><th>收入</th><th>套餐</th><th>剩余天数</th><th>最大设备</th><th>到期时间</th><th>状态</th>';
         html += '</tr></thead><tbody>';
         
         users.forEach(user => {
@@ -968,6 +1061,7 @@
           html += '<tr>';
           html += `<td>${user.username}</td>`;
           html += `<td>${user.email}</td>`;
+          html += `<td>¥${Number(user.income || 0).toFixed(2)}</td>`;
           html += `<td>${sub ? `<span class="badge badge-info">${sub.plan.toUpperCase()}</span>` : '-'}</td>`;
           html += `<td>${sub ? daysRemaining + ' 天' : '-'}</td>`;
           html += `<td>${sub ? sub.maxDevices : '-'}</td>`;

@@ -32,6 +32,11 @@ const userSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  income: {
+    type: Number,
+    default: 0,
+    min: 0
   }
 });
 
