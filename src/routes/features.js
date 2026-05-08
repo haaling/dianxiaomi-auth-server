@@ -23,7 +23,8 @@ const FEATURE_PERMISSIONS = {
   'selectRegionalPricingTemplate': 'premium',
   'runAllSteps': 'premium',
   'runAliexpressCategoryAllSteps': 'premium',
-  'runSelectedSteps': 'premium'
+  'runSelectedSteps': 'premium',
+  'runWanxFixedEdit': 'image_pro'
 };
 
 // 计划等级
@@ -31,7 +32,8 @@ const PLAN_LEVELS = {
   'free': 0,
   'basic': 1,
   'premium': 2,
-  'enterprise': 3
+  'image_pro': 3,
+  'enterprise': 4
 };
 
 // 使用日志存储（生产环境建议使用数据库）

@@ -53,6 +53,7 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
       free: { maxDevices: 3, price: 0 },
       basic: { maxDevices: 5, price: 9.99 },
       premium: { maxDevices: 10, price: 19.99 },
+      image_pro: { maxDevices: 20, price: 39.99 },
       enterprise: { maxDevices: 50, price: 99.99 }
     };
 

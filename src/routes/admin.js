@@ -12,6 +12,16 @@ const Device = require('../models/Device');
 const ProductLog = require('../models/ProductLog');
 const adminAuth = require('../middleware/adminAuth');
 
+const PLAN_CONFIGS = {
+  free: { maxDevices: 3, validDays: 30 },
+  basic: { maxDevices: 5, validDays: 365 },
+  premium: { maxDevices: 10, validDays: 365 },
+  image_pro: { maxDevices: 20, validDays: 365 },
+  enterprise: { maxDevices: 50, validDays: 365 }
+};
+
+const VALID_PLANS = Object.keys(PLAN_CONFIGS);
+
 // 所有管理员路由都需要 API Key 认证
 router.use(adminAuth);
 
@@ -89,19 +99,12 @@ router.post('/create-user', async (req, res) => {
     };
     
     // 预设的套餐配置
-    const planConfigs = {
-      free: { maxDevices: 3, validDays: 30 },
-      basic: { maxDevices: 5, validDays: 365 },
-      premium: { maxDevices: 10, validDays: 365 },
-      enterprise: { maxDevices: 50, validDays: 365 }
-    };
-    
     // 如果指定了套餐，使用预设配置（除非显式覆盖）
-    if (plan && planConfigs[plan]) {
+    if (plan && PLAN_CONFIGS[plan]) {
       subscriptionConfig = {
         plan,
-        maxDevices: maxDevices ?? planConfigs[plan].maxDevices,
-        validDays: validDays ?? planConfigs[plan].validDays
+        maxDevices: maxDevices ?? PLAN_CONFIGS[plan].maxDevices,
+        validDays: validDays ?? PLAN_CONFIGS[plan].validDays
       };
     }
     
@@ -230,6 +233,176 @@ router.get('/users', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '获取用户列表失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 切换单个用户订阅等级（管理员专用）
+ * POST /api/admin/update-user-plan
+ * Body: { userId, plan }
+ */
+router.post('/update-user-plan', async (req, res) => {
+  try {
+    const { userId, plan } = req.body;
+
+    if (!userId || !plan) {
+      return res.status(400).json({
+        success: false,
+        message: 'userId 和 plan 是必填项'
+      });
+    }
+
+    if (!VALID_PLANS.includes(plan)) {
+      return res.status(400).json({
+        success: false,
+        message: `无效套餐：${plan}`
+      });
+    }
+
+    const user = await User.findById(userId).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+
+    let subscription = await Subscription.findOne({ userId: user._id }).sort({ endDate: -1 });
+    const now = new Date();
+
+    if (!subscription) {
+      const startDate = now;
+      const endDate = new Date(startDate.getTime() + PLAN_CONFIGS[plan].validDays * 24 * 60 * 60 * 1000);
+      subscription = await Subscription.create({
+        userId: user._id,
+        plan,
+        maxDevices: PLAN_CONFIGS[plan].maxDevices,
+        startDate,
+        endDate,
+        isActive: true
+      });
+    } else {
+      subscription.plan = plan;
+      subscription.maxDevices = PLAN_CONFIGS[plan].maxDevices;
+      subscription.isActive = subscription.endDate > now;
+      await subscription.save();
+    }
+
+    return res.json({
+      success: true,
+      message: '用户订阅等级更新成功',
+      data: {
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email
+        },
+        subscription: {
+          plan: subscription.plan,
+          maxDevices: subscription.maxDevices,
+          endDate: subscription.endDate,
+          isActive: subscription.isActive
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[admin/update-user-plan] 更新失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '更新用户订阅等级失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 批量切换用户订阅等级（管理员专用）
+ * POST /api/admin/batch-update-user-plan
+ * Body: { userIds: string[], plan }
+ */
+router.post('/batch-update-user-plan', async (req, res) => {
+  try {
+    const { userIds, plan } = req.body;
+
+    if (!Array.isArray(userIds) || userIds.length === 0 || !plan) {
+      return res.status(400).json({
+        success: false,
+        message: 'userIds（数组）和 plan 是必填项'
+      });
+    }
+
+    if (!VALID_PLANS.includes(plan)) {
+      return res.status(400).json({
+        success: false,
+        message: `无效套餐：${plan}`
+      });
+    }
+
+    const uniqueUserIds = [...new Set(userIds.filter(Boolean).map((id) => String(id)))];
+    const users = await User.find({ _id: { $in: uniqueUserIds } }).select('_id username email');
+    const usersById = new Map(users.map((u) => [String(u._id), u]));
+
+    const updated = [];
+    const failed = [];
+    const now = new Date();
+
+    for (const id of uniqueUserIds) {
+      const user = usersById.get(String(id));
+      if (!user) {
+        failed.push({ userId: id, reason: '用户不存在' });
+        continue;
+      }
+
+      try {
+        let subscription = await Subscription.findOne({ userId: user._id }).sort({ endDate: -1 });
+
+        if (!subscription) {
+          const startDate = now;
+          const endDate = new Date(startDate.getTime() + PLAN_CONFIGS[plan].validDays * 24 * 60 * 60 * 1000);
+          subscription = await Subscription.create({
+            userId: user._id,
+            plan,
+            maxDevices: PLAN_CONFIGS[plan].maxDevices,
+            startDate,
+            endDate,
+            isActive: true
+          });
+        } else {
+          subscription.plan = plan;
+          subscription.maxDevices = PLAN_CONFIGS[plan].maxDevices;
+          subscription.isActive = subscription.endDate > now;
+          await subscription.save();
+        }
+
+        updated.push({
+          userId: String(user._id),
+          email: user.email,
+          username: user.username,
+          plan: subscription.plan,
+          maxDevices: subscription.maxDevices
+        });
+      } catch (error) {
+        failed.push({ userId: String(user._id), email: user.email, reason: error.message });
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `批量更新完成，成功 ${updated.length}，失败 ${failed.length}`,
+      data: {
+        targetPlan: plan,
+        total: uniqueUserIds.length,
+        updated,
+        failed
+      }
+    });
+  } catch (error) {
+    console.error('[admin/batch-update-user-plan] 更新失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '批量更新订阅等级失败',
       error: error.message
     });
   }

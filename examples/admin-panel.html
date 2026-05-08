@@ -377,6 +377,7 @@
               <option value="free">Free (免费版)</option>
               <option value="basic">Basic (基础版)</option>
               <option value="premium" selected>Premium (高级版)</option>
+              <option value="image_pro">Image Pro (图片处理版)</option>
               <option value="enterprise">Enterprise (企业版)</option>
             </select>
           </div>
@@ -424,6 +425,7 @@
               <option value="free">Free (免费版)</option>
               <option value="basic">Basic (基础版)</option>
               <option value="premium">Premium (高级版)</option>
+              <option value="image_pro">Image Pro (图片处理版)</option>
               <option value="enterprise">Enterprise (企业版)</option>
             </select>
           </div>
@@ -577,9 +579,22 @@
             <label>用户邮箱 *</label>
             <input type="email" id="queryEmail" placeholder="user@example.com">
           </div>
+          <div class="form-group">
+            <label>切换套餐</label>
+            <select id="queryPlanSelect">
+              <option value="">请选择目标套餐</option>
+              <option value="free">Free (免费版)</option>
+              <option value="basic">Basic (基础版)</option>
+              <option value="premium">Premium (高级版)</option>
+              <option value="image_pro">Image Pro (图片处理版)</option>
+              <option value="enterprise">Enterprise (企业版)</option>
+            </select>
+            <small>先查询用户，再执行套餐切换</small>
+          </div>
         </div>
         <div style="margin-top: 15px;">
           <button class="btn btn-primary" onclick="queryUser()">查询用户</button>
+          <button class="btn btn-warning" onclick="updateQueriedUserPlan()">切换套餐</button>
         </div>
       </div>
       <div id="queryResult" class="result-box hidden"></div>
@@ -614,6 +629,15 @@
         <div id="revenueStats" class="stats-grid"></div>
         <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
           <button class="btn btn-primary" onclick="loadUserList()">刷新列表</button>
+          <select id="batchPlanSelect" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; min-width: 180px;">
+            <option value="">选择批量切换套餐</option>
+            <option value="free">Free (免费版)</option>
+            <option value="basic">Basic (基础版)</option>
+            <option value="premium">Premium (高级版)</option>
+            <option value="image_pro">Image Pro (图片处理版)</option>
+            <option value="enterprise">Enterprise (企业版)</option>
+          </select>
+          <button class="btn btn-warning" onclick="batchUpdateUserPlan()">批量切换套餐</button>
           <span style="color: #666; font-size: 13px;">每页显示 20 条</span>
         </div>
         <div id="userListLoading" class="loading hidden">加载中...</div>
@@ -631,6 +655,7 @@
     let totalPages = 1;
     let currentLogPage = 1;
     let totalLogPages = 1;
+    let currentQueriedUserId = null;
     
     // 标签页切换
     document.querySelectorAll('.tab').forEach(tab => {
@@ -1003,6 +1028,8 @@
         alert('请输入邮箱');
         return;
       }
+
+      currentQueriedUserId = null;
       
       try {
         const response = await fetch(`${API_BASE_URL}/admin/user/${encodeURIComponent(email)}`, {
@@ -1014,6 +1041,51 @@
         
         const data = await response.json();
         showResult('queryResult', data, !response.ok);
+
+        if (response.ok && data?.data?.user?._id) {
+          currentQueriedUserId = data.data.user._id;
+          const currentPlan = data?.data?.subscription?.plan || '';
+          const planSelect = document.getElementById('queryPlanSelect');
+          if (planSelect && currentPlan) {
+            planSelect.value = currentPlan;
+          }
+        }
+      } catch (error) {
+        showResult('queryResult', { error: error.message }, true);
+      }
+    }
+
+    async function updateQueriedUserPlan() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      if (!currentQueriedUserId) {
+        alert('请先查询用户，再切换套餐');
+        return;
+      }
+
+      const plan = document.getElementById('queryPlanSelect').value;
+      if (!plan) {
+        alert('请选择目标套餐');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/update-user-plan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify({ userId: currentQueriedUserId, plan })
+        });
+
+        const data = await response.json();
+        showResult('queryResult', data, !response.ok);
+
+        if (response.ok) {
+          await queryUser();
+        }
       } catch (error) {
         showResult('queryResult', { error: error.message }, true);
       }
@@ -1056,7 +1128,8 @@
         const totalRevenue = Number(stats?.totalRevenue || 0);
         let html = `<div style="margin-bottom: 12px; color: #333; font-weight: 600;">总营收: ¥${totalRevenue.toFixed(2)}</div>`;
         html += '<table class="user-table"><thead><tr>';
-        html += '<th>用户名</th><th>邮箱</th><th>收入</th><th>套餐</th><th>剩余天数</th><th>最大设备</th><th>到期时间</th><th>状态</th>';
+        html += '<th><input type="checkbox" id="selectAllUsers" onchange="toggleSelectAllUsers(this)"></th>';
+        html += '<th>用户名</th><th>邮箱</th><th>收入</th><th>套餐</th><th>剩余天数</th><th>最大设备</th><th>到期时间</th><th>状态</th><th>操作</th>';
         html += '</tr></thead><tbody>';
         
         users.forEach(user => {
@@ -1065,8 +1138,11 @@
           const endDate = sub ? new Date(sub.endDate) : null;
           const daysRemaining = endDate ? Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24))) : 0;
           const isActive = sub && sub.isActive && endDate > now;
+          const currentPlan = sub?.plan || 'free';
+          const optionHtml = getPlanOptionHtml(currentPlan);
           
           html += '<tr>';
+          html += `<td><input type="checkbox" class="user-select-checkbox" value="${user._id}"></td>`;
           html += `<td>${user.username}</td>`;
           html += `<td>${user.email}</td>`;
           html += `<td>¥${Number(user.income || 0).toFixed(2)}</td>`;
@@ -1075,6 +1151,14 @@
           html += `<td>${sub ? sub.maxDevices : '-'}</td>`;
           html += `<td>${endDate ? endDate.toLocaleDateString('zh-CN') : '-'}</td>`;
           html += `<td>${isActive ? '<span class="badge badge-success">有效</span>' : '<span class="badge badge-danger">过期</span>'}</td>`;
+          html += `<td>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <select id="plan-select-${user._id}" style="padding:4px; border:1px solid #ddd; border-radius:4px;">
+                ${optionHtml}
+              </select>
+              <button class="btn btn-primary" style="padding:6px 10px;" onclick="updateUserPlan('${user._id}')">切换</button>
+            </div>
+          </td>`;
           html += '</tr>';
         });
         
@@ -1094,6 +1178,108 @@
       } catch (error) {
         loading.classList.add('hidden');
         content.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      }
+    }
+
+    function getPlanOptionHtml(currentPlan = 'free') {
+      const plans = [
+        { value: 'free', label: 'Free' },
+        { value: 'basic', label: 'Basic' },
+        { value: 'premium', label: 'Premium' },
+        { value: 'image_pro', label: 'Image Pro' },
+        { value: 'enterprise', label: 'Enterprise' }
+      ];
+
+      return plans
+        .map((plan) => `<option value="${plan.value}" ${currentPlan === plan.value ? 'selected' : ''}>${plan.label}</option>`)
+        .join('');
+    }
+
+    function getSelectedUserIds() {
+      return Array.from(document.querySelectorAll('.user-select-checkbox:checked')).map((el) => el.value);
+    }
+
+    function toggleSelectAllUsers(source) {
+      const checked = source?.checked === true;
+      document.querySelectorAll('.user-select-checkbox').forEach((el) => {
+        el.checked = checked;
+      });
+    }
+
+    async function updateUserPlan(userId) {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const select = document.getElementById(`plan-select-${userId}`);
+      const plan = select?.value;
+      if (!plan) {
+        alert('请选择目标套餐');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/update-user-plan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify({ userId, plan })
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          alert(result.message || '切换套餐失败');
+          return;
+        }
+
+        alert(`套餐切换成功：${result.data.user.email} -> ${result.data.subscription.plan}`);
+        await loadUserList(currentPage);
+      } catch (error) {
+        alert(`切换套餐失败：${error.message}`);
+      }
+    }
+
+    async function batchUpdateUserPlan() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const plan = document.getElementById('batchPlanSelect').value;
+      if (!plan) {
+        alert('请先选择要切换到的套餐');
+        return;
+      }
+
+      const userIds = getSelectedUserIds();
+      if (userIds.length === 0) {
+        alert('请先勾选要批量处理的用户');
+        return;
+      }
+
+      if (!confirm(`确定将选中的 ${userIds.length} 个用户切换为 ${plan} 套餐吗？`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/batch-update-user-plan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify({ userIds, plan })
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          alert(result.message || '批量切换套餐失败');
+          return;
+        }
+
+        alert(`${result.message}`);
+        await loadUserList(currentPage);
+      } catch (error) {
+        alert(`批量切换套餐失败：${error.message}`);
       }
     }
 
