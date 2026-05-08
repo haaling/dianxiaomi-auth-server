@@ -805,7 +805,7 @@ router.post('/clear-kick-cooldown', async (req, res) => {
  */
 router.get('/product-logs', async (req, res) => {
   try {
-    const { page = 1, limit = 20, action, username, loginEmail, loginAccount } = req.query;
+    const { page = 1, limit = 20, action, username, loginEmail, loginAccount, startDate, endDate } = req.query;
     const parsedPage = parseInt(page, 10) || 1;
     const parsedLimit = parseInt(limit, 10) || 20;
     const skip = (parsedPage - 1) * parsedLimit;
@@ -815,6 +815,24 @@ router.get('/product-logs', async (req, res) => {
     if (action) query.action = action;
     if (username) query.username = username;
     if (loginEmailFilter) query.loginAccount = loginEmailFilter;
+
+    const createdAtFilter = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      if (!Number.isNaN(start.getTime())) {
+        createdAtFilter.$gte = start;
+      }
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!Number.isNaN(end.getTime())) {
+        end.setHours(23, 59, 59, 999);
+        createdAtFilter.$lte = end;
+      }
+    }
+    if (Object.keys(createdAtFilter).length > 0) {
+      query.createdAt = createdAtFilter;
+    }
 
     const [logs, total] = await Promise.all([
       ProductLog.find(query)
@@ -853,11 +871,29 @@ router.get('/product-logs', async (req, res) => {
  */
 router.get('/product-log-stats', async (req, res) => {
   try {
-    const { username, loginEmail, loginAccount } = req.query;
+    const { username, loginEmail, loginAccount, startDate, endDate } = req.query;
     const loginEmailFilter = loginEmail || loginAccount;
     const matchCondition = {};
     if (username) matchCondition.username = username;
     if (loginEmailFilter) matchCondition.loginAccount = loginEmailFilter;
+
+    const createdAtFilter = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      if (!Number.isNaN(start.getTime())) {
+        createdAtFilter.$gte = start;
+      }
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!Number.isNaN(end.getTime())) {
+        end.setHours(23, 59, 59, 999);
+        createdAtFilter.$lte = end;
+      }
+    }
+    if (Object.keys(createdAtFilter).length > 0) {
+      matchCondition.createdAt = createdAtFilter;
+    }
 
     const [totalLogs, actionStats, accountStats, recentLogs] = await Promise.all([
       ProductLog.countDocuments(matchCondition),

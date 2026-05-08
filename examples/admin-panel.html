@@ -542,6 +542,14 @@
             <label>登录邮箱</label>
             <input type="text" id="logLoginEmailFilter" placeholder="例如 test@example.com">
           </div>
+          <div class="form-group">
+            <label>开始日期</label>
+            <input type="date" id="logStartDateFilter">
+          </div>
+          <div class="form-group">
+            <label>结束日期</label>
+            <input type="date" id="logEndDateFilter">
+          </div>
         </div>
         <div style="display: flex; gap: 10px; align-items: center; margin-top: 15px;">
           <button class="btn btn-primary" onclick="loadProductLogs()">查询日志</button>
@@ -1093,7 +1101,9 @@
       return {
         action: document.getElementById('logActionFilter').value,
         username: document.getElementById('logUsernameFilter').value.trim(),
-        loginEmail: document.getElementById('logLoginEmailFilter').value.trim()
+        loginEmail: document.getElementById('logLoginEmailFilter').value.trim(),
+        startDate: document.getElementById('logStartDateFilter').value,
+        endDate: document.getElementById('logEndDateFilter').value
       };
     }
 
@@ -1193,19 +1203,25 @@
         }
 
         let html = '<table class="user-table"><thead><tr>';
-        html += '<th>时间</th><th>登录邮箱</th><th>店铺名</th><th>中文名</th><th>英文名</th><th>链接</th>';
+        html += '<th>日期</th><th>时间</th><th>登录邮箱</th><th>店铺名</th><th>中文名</th><th>英文名</th><th>来源URL</th><th>链接</th>';
         html += '</tr></thead><tbody>';
 
         logs.forEach((log) => {
           const chineseTitle = log.chineseTitle || log.originalTitle || '-';
           const englishTitle = log.englishTitle || '-';
+          const sourceUrl = log.sourceUrl || '-';
+          const createdAt = new Date(log.createdAt);
+          const dateText = Number.isNaN(createdAt.getTime()) ? '-' : createdAt.toLocaleDateString('zh-CN');
+          const timeText = Number.isNaN(createdAt.getTime()) ? '-' : createdAt.toLocaleTimeString('zh-CN', { hour12: false });
           html += '<tr>';
-          html += `<td>${new Date(log.createdAt).toLocaleString('zh-CN')}</td>`;
+          html += `<td>${dateText}</td>`;
+          html += `<td>${timeText}</td>`;
           html += `<td>${log.loginAccount || '-'}</td>`;
           html += `<td>${log.storeName || '-'}</td>`;
           html += `<td title="${String(chineseTitle).replace(/"/g, '&quot;')}">${chineseTitle}</td>`;
           html += `<td title="${String(englishTitle).replace(/"/g, '&quot;')}">${englishTitle}</td>`;
-          html += `<td>${log.sourceUrl ? `<a href="${log.sourceUrl}" target="_blank" rel="noopener noreferrer">查看链接</a>` : '-'}</td>`;
+          html += `<td title="${String(sourceUrl).replace(/"/g, '&quot;')}">${sourceUrl}</td>`;
+          html += `<td>${log.sourceUrl ? `<a href="${log.sourceUrl}" target="_blank" rel="noopener noreferrer">访问</a>` : '-'}</td>`;
           html += '</tr>';
         });
 
