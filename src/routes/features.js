@@ -24,6 +24,9 @@ const FEATURE_PERMISSIONS = {
   'runAllSteps': 'premium',
   'runAliexpressCategoryAllSteps': 'premium',
   'runSelectedSteps': 'premium',
+  'tbTmallCollectAndDxmFill': 'tb_bridge',
+  'collectAndOpenDxmBtn': 'tb_bridge',
+  'runMappingFlowBtn': 'tb_bridge',
   'runWanxFixedEdit': 'image_pro'
 };
 
@@ -32,8 +35,9 @@ const PLAN_LEVELS = {
   'free': 0,
   'basic': 1,
   'premium': 2,
-  'image_pro': 3,
-  'enterprise': 4
+  'tb_bridge': 3,
+  'image_pro': 4,
+  'enterprise': 5
 };
 
 // 使用日志存储（生产环境建议使用数据库）

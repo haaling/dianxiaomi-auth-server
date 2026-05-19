@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const LoginLog = require('../models/LoginLog');
 const authenticateToken = require('../middleware/auth');
 const {
   getLatestSubscription,
@@ -15,6 +16,23 @@ const generateToken = (userId) => {
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
+};
+
+const getClientIp = (req) => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (typeof forwardedFor === 'string' && forwardedFor.trim()) {
+    const firstIp = forwardedFor.split(',')[0].trim();
+    if (firstIp) {
+      return firstIp;
+    }
+  }
+
+  const realIp = req.headers['x-real-ip'];
+  if (typeof realIp === 'string' && realIp.trim()) {
+    return realIp.trim();
+  }
+
+  return req.ip || req.socket?.remoteAddress || 'unknown';
 };
 
 // 用户注册（已禁用 - 请使用管理员接口创建用户）
@@ -165,6 +183,23 @@ router.post('/login', async (req, res) => {
     // 更新最后登录时间
     user.lastLoginAt = Date.now();
     await user.save();
+
+    const loginIp = getClientIp(req);
+    const loginUserAgent = req.get('user-agent') || null;
+
+    try {
+      await LoginLog.create({
+        userId: user._id,
+        email: user.email,
+        username: user.username,
+        ip: loginIp,
+        userAgent: loginUserAgent,
+        loginAt: new Date()
+      });
+    } catch (logError) {
+      // 避免日志写入失败影响正常登录
+      console.error('[auth/login] 记录登录日志失败:', logError.message);
+    }
 
     // 生成Token
     const token = generateToken(user._id);

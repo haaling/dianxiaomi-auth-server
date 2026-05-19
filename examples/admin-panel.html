@@ -545,6 +545,10 @@
             <input type="text" id="logLoginEmailFilter" placeholder="例如 test@example.com">
           </div>
           <div class="form-group">
+            <label>登录IP</label>
+            <input type="text" id="logIpFilter" placeholder="例如 1.2.3.4">
+          </div>
+          <div class="form-group">
             <label>开始日期</label>
             <input type="date" id="logStartDateFilter">
           </div>
@@ -555,6 +559,7 @@
         </div>
         <div style="display: flex; gap: 10px; align-items: center; margin-top: 15px;">
           <button class="btn btn-primary" onclick="loadProductLogs()">查询日志</button>
+          <button class="btn btn-warning" onclick="loadLoginLogs()">查询登录IP日志</button>
           <button class="btn btn-success" onclick="loadProductLogStats()">刷新统计</button>
           <span style="color: #666; font-size: 13px;">每页显示 20 条</span>
         </div>
@@ -567,6 +572,13 @@
         <div id="productLogLoading" class="loading hidden">加载中...</div>
         <div id="productLogContent"></div>
         <div id="productLogPagination" class="pagination hidden"></div>
+      </div>
+
+      <div class="form-section">
+        <h3>🌐 登录IP日志</h3>
+        <div id="loginLogLoading" class="loading hidden">加载中...</div>
+        <div id="loginLogContent"></div>
+        <div id="loginLogPagination" class="pagination hidden"></div>
       </div>
     </div>
     
@@ -655,6 +667,8 @@
     let totalPages = 1;
     let currentLogPage = 1;
     let totalLogPages = 1;
+    let currentLoginLogPage = 1;
+    let totalLoginLogPages = 1;
     let currentQueriedUserId = null;
     
     // 标签页切换
@@ -681,6 +695,7 @@
         if (tabName === 'logs') {
           loadProductLogStats();
           loadProductLogs();
+          loadLoginLogs();
         }
       });
     });
@@ -1288,6 +1303,7 @@
         action: document.getElementById('logActionFilter').value,
         username: document.getElementById('logUsernameFilter').value.trim(),
         loginEmail: document.getElementById('logLoginEmailFilter').value.trim(),
+        ip: document.getElementById('logIpFilter').value.trim(),
         startDate: document.getElementById('logStartDateFilter').value,
         endDate: document.getElementById('logEndDateFilter').value
       };
@@ -1389,11 +1405,10 @@
         }
 
         let html = '<table class="user-table"><thead><tr>';
-        html += '<th>日期</th><th>时间</th><th>登录邮箱</th><th>店铺名</th><th>中文名</th><th>英文名</th><th>来源URL</th><th>链接</th>';
+        html += '<th>日期</th><th>时间</th><th>登录邮箱</th><th>店铺名</th><th>英文名</th><th>来源URL</th><th>链接</th>';
         html += '</tr></thead><tbody>';
 
         logs.forEach((log) => {
-          const chineseTitle = log.chineseTitle || log.originalTitle || '-';
           const englishTitle = log.englishTitle || '-';
           const sourceUrl = log.sourceUrl || '-';
           const createdAt = new Date(log.createdAt);
@@ -1404,7 +1419,6 @@
           html += `<td>${timeText}</td>`;
           html += `<td>${log.loginAccount || '-'}</td>`;
           html += `<td>${log.storeName || '-'}</td>`;
-          html += `<td title="${String(chineseTitle).replace(/"/g, '&quot;')}">${chineseTitle}</td>`;
           html += `<td title="${String(englishTitle).replace(/"/g, '&quot;')}">${englishTitle}</td>`;
           html += `<td title="${String(sourceUrl).replace(/"/g, '&quot;')}">${sourceUrl}</td>`;
           html += `<td>${log.sourceUrl ? `<a href="${log.sourceUrl}" target="_blank" rel="noopener noreferrer">访问</a>` : '-'}</td>`;
@@ -1419,6 +1433,90 @@
           pagHtml += `<button class="btn btn-primary" ${currentLogPage === 1 ? 'disabled' : ''} onclick="loadProductLogs(${currentLogPage - 1})">上一页</button>`;
           pagHtml += `<span>第 ${currentLogPage} / ${totalLogPages} 页</span>`;
           pagHtml += `<button class="btn btn-primary" ${currentLogPage === totalLogPages ? 'disabled' : ''} onclick="loadProductLogs(${currentLogPage + 1})">下一页</button>`;
+          pagination.innerHTML = pagHtml;
+          pagination.classList.remove('hidden');
+        }
+      } catch (error) {
+        loading.classList.add('hidden');
+        content.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      }
+    }
+
+    async function loadLoginLogs(page = 1) {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const loading = document.getElementById('loginLogLoading');
+      const content = document.getElementById('loginLogContent');
+      const pagination = document.getElementById('loginLogPagination');
+      const filters = getLogFilters();
+
+      loading.classList.remove('hidden');
+      content.innerHTML = '';
+      pagination.classList.add('hidden');
+
+      try {
+        const query = buildLogQuery({
+          page,
+          limit: 20,
+          email: filters.loginEmail,
+          ip: filters.ip,
+          startDate: filters.startDate,
+          endDate: filters.endDate
+        });
+
+        const response = await fetch(`${API_BASE_URL}/admin/login-logs?${query}`, {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': apiKey
+          }
+        });
+
+        const result = await response.json();
+        loading.classList.add('hidden');
+
+        if (!response.ok) {
+          content.innerHTML = `<div class="result-box error">${JSON.stringify(result, null, 2)}</div>`;
+          return;
+        }
+
+        const { logs, pagination: pag } = result.data;
+        currentLoginLogPage = pag.page;
+        totalLoginLogPages = pag.totalPages;
+
+        if (!logs.length) {
+          content.innerHTML = '<div class="loading">暂无登录IP日志</div>';
+          return;
+        }
+
+        let html = '<table class="user-table"><thead><tr>';
+        html += '<th>日期</th><th>时间</th><th>账号</th><th>用户名</th><th>IP</th><th>User-Agent</th>';
+        html += '</tr></thead><tbody>';
+
+        logs.forEach((log) => {
+          const loginAt = new Date(log.loginAt);
+          const dateText = Number.isNaN(loginAt.getTime()) ? '-' : loginAt.toLocaleDateString('zh-CN');
+          const timeText = Number.isNaN(loginAt.getTime()) ? '-' : loginAt.toLocaleTimeString('zh-CN', { hour12: false });
+          const agentText = log.userAgent || '-';
+
+          html += '<tr>';
+          html += `<td>${dateText}</td>`;
+          html += `<td>${timeText}</td>`;
+          html += `<td>${log.email || '-'}</td>`;
+          html += `<td>${log.username || '-'}</td>`;
+          html += `<td>${log.ip || '-'}</td>`;
+          html += `<td title="${String(agentText).replace(/"/g, '&quot;')}">${agentText}</td>`;
+          html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        content.innerHTML = html;
+
+        if (totalLoginLogPages > 1) {
+          let pagHtml = '';
+          pagHtml += `<button class="btn btn-primary" ${currentLoginLogPage === 1 ? 'disabled' : ''} onclick="loadLoginLogs(${currentLoginLogPage - 1})">上一页</button>`;
+          pagHtml += `<span>第 ${currentLoginLogPage} / ${totalLoginLogPages} 页</span>`;
+          pagHtml += `<button class="btn btn-primary" ${currentLoginLogPage === totalLoginLogPages ? 'disabled' : ''} onclick="loadLoginLogs(${currentLoginLogPage + 1})">下一页</button>`;
           pagination.innerHTML = pagHtml;
           pagination.classList.remove('hidden');
         }

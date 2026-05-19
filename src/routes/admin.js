@@ -10,12 +10,14 @@ const User = require('../models/User');
 const Subscription = require('../models/Subscription');
 const Device = require('../models/Device');
 const ProductLog = require('../models/ProductLog');
+const LoginLog = require('../models/LoginLog');
 const adminAuth = require('../middleware/adminAuth');
 
 const PLAN_CONFIGS = {
   free: { maxDevices: 3, validDays: 30 },
   basic: { maxDevices: 5, validDays: 365 },
   premium: { maxDevices: 10, validDays: 365 },
+  tb_bridge: { maxDevices: 15, validDays: 365 },
   image_pro: { maxDevices: 20, validDays: 365 },
   enterprise: { maxDevices: 50, validDays: 365 }
 };
@@ -1110,6 +1112,74 @@ router.get('/product-log-stats', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: '获取产品日志统计失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 获取登录日志（管理员专用）
+ * GET /api/admin/login-logs?page=1&limit=20&email=&ip=&startDate=&endDate=
+ */
+router.get('/login-logs', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, email, ip, startDate, endDate } = req.query;
+    const parsedPage = parseInt(page, 10) || 1;
+    const parsedLimit = parseInt(limit, 10) || 20;
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const query = {};
+    if (email) {
+      query.email = { $regex: String(email).trim(), $options: 'i' };
+    }
+    if (ip) {
+      query.ip = { $regex: String(ip).trim(), $options: 'i' };
+    }
+
+    const loginAtFilter = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      if (!Number.isNaN(start.getTime())) {
+        loginAtFilter.$gte = start;
+      }
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!Number.isNaN(end.getTime())) {
+        end.setHours(23, 59, 59, 999);
+        loginAtFilter.$lte = end;
+      }
+    }
+    if (Object.keys(loginAtFilter).length > 0) {
+      query.loginAt = loginAtFilter;
+    }
+
+    const [logs, total] = await Promise.all([
+      LoginLog.find(query)
+        .sort({ loginAt: -1 })
+        .skip(skip)
+        .limit(parsedLimit)
+        .select('-__v'),
+      LoginLog.countDocuments(query)
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        logs,
+        pagination: {
+          page: parsedPage,
+          limit: parsedLimit,
+          total,
+          totalPages: Math.ceil(total / parsedLimit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[admin/login-logs] 获取失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '获取登录日志失败',
       error: error.message
     });
   }

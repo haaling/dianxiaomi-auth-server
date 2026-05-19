@@ -8,7 +8,7 @@ const subscriptionSchema = new mongoose.Schema({
   },
   plan: {
     type: String,
-    enum: ['free', 'basic', 'premium', 'image_pro', 'enterprise'],
+    enum: ['free', 'basic', 'premium', 'tb_bridge', 'image_pro', 'enterprise'],
     default: 'free'
   },
   maxDevices: {
