@@ -377,6 +377,7 @@
               <option value="free">Free (免费版)</option>
               <option value="basic">Basic (基础版)</option>
               <option value="premium" selected>Premium (高级版)</option>
+              <option value="tb_bridge">TB Bridge (采集并上品)</option>
               <option value="image_pro">Image Pro (图片处理版)</option>
               <option value="enterprise">Enterprise (企业版)</option>
             </select>
@@ -425,6 +426,7 @@
               <option value="free">Free (免费版)</option>
               <option value="basic">Basic (基础版)</option>
               <option value="premium">Premium (高级版)</option>
+              <option value="tb_bridge">TB Bridge (采集并上品)</option>
               <option value="image_pro">Image Pro (图片处理版)</option>
               <option value="enterprise">Enterprise (企业版)</option>
             </select>
@@ -598,6 +600,7 @@
               <option value="free">Free (免费版)</option>
               <option value="basic">Basic (基础版)</option>
               <option value="premium">Premium (高级版)</option>
+              <option value="tb_bridge">TB Bridge (采集并上品)</option>
               <option value="image_pro">Image Pro (图片处理版)</option>
               <option value="enterprise">Enterprise (企业版)</option>
             </select>
@@ -646,6 +649,7 @@
             <option value="free">Free (免费版)</option>
             <option value="basic">Basic (基础版)</option>
             <option value="premium">Premium (高级版)</option>
+            <option value="tb_bridge">TB Bridge (采集并上品)</option>
             <option value="image_pro">Image Pro (图片处理版)</option>
             <option value="enterprise">Enterprise (企业版)</option>
           </select>
@@ -1198,11 +1202,12 @@
 
     function getPlanOptionHtml(currentPlan = 'free') {
       const plans = [
-        { value: 'free', label: 'Free' },
-        { value: 'basic', label: 'Basic' },
-        { value: 'premium', label: 'Premium' },
-        { value: 'image_pro', label: 'Image Pro' },
-        { value: 'enterprise', label: 'Enterprise' }
+        { value: 'free', label: 'Free (免费版)' },
+        { value: 'basic', label: 'Basic (基础版)' },
+        { value: 'premium', label: 'Premium (高级版)' },
+        { value: 'tb_bridge', label: 'TB Bridge (采集并上品)' },
+        { value: 'image_pro', label: 'Image Pro (图片处理版)' },
+        { value: 'enterprise', label: 'Enterprise (企业版)' }
       ];
 
       return plans
