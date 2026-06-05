@@ -13,8 +13,24 @@ const productLogRoutes = require('./routes/productLog');
 
 const app = express();
 
-// 信任代理 - 解决 Railway 部署问题
-app.set('trust proxy', true);
+// Railway 等平台通常在应用前面只有 1 层反向代理。
+// 避免使用 true（信任任意层代理）触发 express-rate-limit 的安全告警。
+const resolveTrustProxy = () => {
+  const raw = process.env.TRUST_PROXY;
+
+  if (!raw) return 1;
+  if (raw === 'true') return 1;
+  if (raw === 'false') return false;
+
+  const asNumber = Number(raw);
+  if (Number.isInteger(asNumber) && asNumber >= 0) {
+    return asNumber;
+  }
+
+  return raw;
+};
+
+app.set('trust proxy', resolveTrustProxy());
 
 // 异步连接数据库（不阻塞服务器启动）
 connectDB().catch(err => {
@@ -54,6 +70,18 @@ app.use(cors({
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15分钟
   max: 100, // 限制100个请求
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/health',
+  keyGenerator: (req) => {
+    const forwardedFor = req.headers['x-forwarded-for'];
+    if (typeof forwardedFor === 'string' && forwardedFor.trim()) {
+      const firstIp = forwardedFor.split(',')[0].trim();
+      if (firstIp) return firstIp;
+    }
+
+    return req.ip || req.socket?.remoteAddress || 'unknown';
+  },
   message: {
     success: false,
     message: '请求过于频繁，请稍后再试'
