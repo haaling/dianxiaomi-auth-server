@@ -56,6 +56,8 @@ const productLogSchema = new mongoose.Schema({
 });
 
 // 创建复合索引用于查询优化
+productLogSchema.index({ createdAt: -1 });
+productLogSchema.index({ action: 1, createdAt: -1 });
 productLogSchema.index({ userId: 1, createdAt: -1 });
 productLogSchema.index({ username: 1, createdAt: -1 });
 productLogSchema.index({ loginAccount: 1, createdAt: -1 });
