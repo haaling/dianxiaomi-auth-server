@@ -116,7 +116,7 @@ const authenticateToken = async (req, res, next) => {
     } else {
       const dbStart = Date.now();
       user = await User.findById(decoded.userId)
-        .select('_id username email isActive lastLoginAt')
+        .select('username isActive')
         .lean();
       const dbDuration = Date.now() - dbStart;
 
