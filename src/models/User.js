@@ -40,6 +40,11 @@ const userSchema = new mongoose.Schema({
   }
 });
 
+// 为管理员列表查询添加排序索引
+userSchema.index({ createdAt: -1 });
+// 为营收统计聚合添加索引
+userSchema.index({ income: 1 });
+
 // 密码加密中间件
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();

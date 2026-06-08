@@ -181,38 +181,49 @@ router.get('/users', async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
     
-    const users = await User.find()
-      .select('-password')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-    
-    const total = await User.countDocuments();
-    const totalRevenueAgg = await User.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: '$income' }
+    const t0 = Date.now();
+
+    const [users, total, totalRevenueAgg] = await Promise.all([
+      User.find()
+        .select('-password')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(),
+      User.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: '$income' }
+          }
         }
-      }
+      ])
     ]);
     const totalRevenue = totalRevenueAgg[0]?.totalRevenue || 0;
-    
-    // 获取每个用户的订阅信息
-    const usersWithSubscription = await Promise.all(
-      users.map(async (user) => {
-        const subscription = await Subscription.findOne({ userId: user._id });
-        return {
-          ...user.toObject(),
-          subscription: subscription ? {
-            plan: subscription.plan,
-            maxDevices: subscription.maxDevices,
-            endDate: subscription.endDate,
-            isActive: subscription.isActive
-          } : null
-        };
-      })
+
+    // 批量获取订阅信息（避免 N+1 查询）
+    const userIds = users.map((u) => u._id);
+    const subscriptions = await Subscription.find({ userId: { $in: userIds } })
+      .lean();
+    const subscriptionMap = new Map(
+      subscriptions.map((s) => [String(s.userId), s])
     );
+
+    const usersWithSubscription = users.map((user) => {
+      const subscription = subscriptionMap.get(String(user._id));
+      return {
+        ...user,
+        subscription: subscription ? {
+          plan: subscription.plan,
+          maxDevices: subscription.maxDevices,
+          endDate: subscription.endDate,
+          isActive: subscription.isActive
+        } : null
+      };
+    });
+
+    console.log(`[admin/users] page=${page} limit=${limit} | users=${users.length}/${total} | time=${Date.now() - t0}ms`);
     
     res.json({
       success: true,
@@ -1212,23 +1223,26 @@ router.get('/product-log-stats', async (req, res) => {
       matchCondition.createdAt = createdAtFilter;
     }
 
+    const statsT0 = Date.now();
     const [totalLogs, actionStats, accountStats, recentLogs] = await Promise.all([
       ProductLog.countDocuments(matchCondition),
       ProductLog.aggregate([
         { $match: matchCondition },
         { $group: { _id: '$action', count: { $sum: 1 } } }
-      ]),
+      ]).allowDiskUse(true),
       ProductLog.aggregate([
         { $match: matchCondition },
         { $group: { _id: '$loginAccount', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]),
+      ]).allowDiskUse(true),
       ProductLog.find(matchCondition)
         .sort({ createdAt: -1 })
         .limit(10)
         .select('chineseTitle englishTitle username loginAccount storeName sourceUrl action createdAt')
+        .lean()
     ]);
+    console.log(`[admin/product-log-stats] time=${Date.now() - statsT0}ms | total=${totalLogs}`);
 
     const stats = {
       total: totalLogs,
@@ -1296,14 +1310,17 @@ router.get('/login-logs', async (req, res) => {
       query.loginAt = loginAtFilter;
     }
 
+    const loginLogsT0 = Date.now();
     const [logs, total] = await Promise.all([
       LoginLog.find(query)
         .sort({ loginAt: -1 })
         .skip(skip)
         .limit(parsedLimit)
-        .select('-__v'),
+        .select('-__v')
+        .lean(),
       LoginLog.countDocuments(query)
     ]);
+    console.log(`[admin/login-logs] page=${parsedPage} limit=${parsedLimit} | docs=${logs.length}/${total} | time=${Date.now() - loginLogsT0}ms`);
 
     return res.json({
       success: true,

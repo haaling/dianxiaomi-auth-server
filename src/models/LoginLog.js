@@ -40,6 +40,8 @@ const loginLogSchema = new mongoose.Schema({
 
 loginLogSchema.index({ email: 1, loginAt: -1 });
 loginLogSchema.index({ ip: 1, loginAt: -1 });
+// 支持管理员按时间范围分页查询
+loginLogSchema.index({ loginAt: -1 });
 
 const LoginLog = mongoose.model('LoginLog', loginLogSchema);
 
