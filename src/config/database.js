@@ -20,6 +20,8 @@ const connectDB = async () => {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
+      maxPoolSize: 50,
+      minPoolSize: 10,
     });
     console.log(`✅ MongoDB 连接成功: ${conn.connection.host}`);
   } catch (error) {

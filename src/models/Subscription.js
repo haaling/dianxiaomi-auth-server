@@ -41,6 +41,9 @@ const subscriptionSchema = new mongoose.Schema({
   }
 });
 
+// 复合索引：加速 getLatestSubscription 按 userId 查询并按 endDate 排序
+subscriptionSchema.index({ userId: 1, endDate: -1 });
+
 // 检查订阅是否有效
 subscriptionSchema.methods.isValid = function() {
   const now = new Date();

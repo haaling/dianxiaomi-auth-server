@@ -27,6 +27,7 @@ const normalizeSubscriptionState = async (subscription) => {
   const daysRemaining = calculateDaysRemaining(subscription.endDate);
   const isValid = subscription.endDate > new Date();
 
+  // 仅在 isActive 状态实际发生变化时才写入数据库，避免每次登录都触发不必要的写操作
   if (subscription.isActive !== isValid) {
     subscription.isActive = isValid;
     await subscription.save();
