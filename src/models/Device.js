@@ -42,6 +42,9 @@ const deviceSchema = new mongoose.Schema({
 // 但不同用户可以使用同一个 deviceId（允许多账号登录）
 deviceSchema.index({ userId: 1, deviceId: 1 }, { unique: true });
 
+// 复合索引：加速 checkDeviceLimit 按 userId + isActive 查询
+deviceSchema.index({ userId: 1, isActive: 1 });
+
 // 更新最后活跃时间
 deviceSchema.methods.updateActivity = function() {
   this.lastActiveAt = Date.now();
