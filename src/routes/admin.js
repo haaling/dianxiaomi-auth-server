@@ -28,6 +28,10 @@ const VALID_PLANS = Object.keys(PLAN_CONFIGS);
 const COUNT_CACHE_TTL_MS = 30 * 1000;
 const REVENUE_CACHE_TTL_MS = 60 * 1000;
 const MAX_COUNT_CACHE_ENTRIES = 200;
+const ADMIN_QUERY_MAX_TIME_MS = Math.max(
+  500,
+  parseInt(process.env.ADMIN_QUERY_MAX_TIME_MS || '4000', 10)
+);
 
 const countCache = new Map();
 let revenueCache = {
@@ -237,8 +241,9 @@ router.get('/users', async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
+        .maxTimeMS(ADMIN_QUERY_MAX_TIME_MS)
         .lean(),
-      User.countDocuments()
+      User.countDocuments().maxTimeMS(ADMIN_QUERY_MAX_TIME_MS)
     ]);
 
     let totalRevenue = revenueCache.value;
@@ -250,7 +255,7 @@ router.get('/users', async (req, res) => {
             totalRevenue: { $sum: '$income' }
           }
         }
-      ]);
+      ]).option({ maxTimeMS: ADMIN_QUERY_MAX_TIME_MS });
       totalRevenue = totalRevenueAgg[0]?.totalRevenue || 0;
       revenueCache = {
         value: totalRevenue,
@@ -263,6 +268,7 @@ router.get('/users', async (req, res) => {
     const subscriptions = await Subscription.find({ userId: { $in: userIds } })
       .select('userId plan maxDevices endDate isActive')
       .sort({ endDate: -1 })
+      .maxTimeMS(ADMIN_QUERY_MAX_TIME_MS)
       .lean();
     const subscriptionMap = new Map();
     subscriptions.forEach((s) => {
@@ -1267,9 +1273,10 @@ router.get('/product-logs', async (req, res) => {
       .skip(skip)
       .limit(parsedLimit)
       .select('-__v')
+      .maxTimeMS(ADMIN_QUERY_MAX_TIME_MS)
       .lean();
     const totalPromise = cachedTotal === null
-      ? ProductLog.countDocuments(query)
+      ? ProductLog.countDocuments(query).maxTimeMS(ADMIN_QUERY_MAX_TIME_MS)
       : Promise.resolve(cachedTotal);
 
     const [logs, total] = await Promise.all([logsPromise, totalPromise]);
@@ -1428,9 +1435,10 @@ router.get('/login-logs', async (req, res) => {
       .skip(skip)
       .limit(parsedLimit)
       .select('-__v')
+      .maxTimeMS(ADMIN_QUERY_MAX_TIME_MS)
       .lean();
     const totalPromise = cachedTotal === null
-      ? LoginLog.countDocuments(query)
+      ? LoginLog.countDocuments(query).maxTimeMS(ADMIN_QUERY_MAX_TIME_MS)
       : Promise.resolve(cachedTotal);
 
     const [logs, total] = await Promise.all([logsPromise, totalPromise]);

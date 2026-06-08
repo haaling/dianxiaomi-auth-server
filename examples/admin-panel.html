@@ -677,6 +677,30 @@
     let currentLoginLogPage = 1;
     let totalLoginLogPages = 1;
     let currentQueriedUserId = null;
+    const REQUEST_TIMEOUT_MS = 12000;
+    const requestInFlight = new Set();
+
+    async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    function beginRequest(key) {
+      if (requestInFlight.has(key)) {
+        return false;
+      }
+      requestInFlight.add(key);
+      return true;
+    }
+
+    function endRequest(key) {
+      requestInFlight.delete(key);
+    }
     
     // 标签页切换
     document.querySelectorAll('.tab').forEach(tab => {
@@ -726,8 +750,12 @@
     }
 
     async function loadRevenueStats() {
+      if (!beginRequest('loadRevenueStats')) return;
       const apiKey = getApiKey();
-      if (!apiKey) return;
+      if (!apiKey) {
+        endRequest('loadRevenueStats');
+        return;
+      }
 
       const container = document.getElementById('revenueStats');
       const range = document.getElementById('revenueRange').value;
@@ -747,7 +775,7 @@
       container.innerHTML = '<div class="loading">加载营收统计中...</div>';
 
       try {
-        const response = await fetch(`${API_BASE_URL}/admin/revenue-stats?${query.toString()}`, {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/admin/revenue-stats?${query.toString()}`, {
           method: 'GET',
           headers: {
             'x-admin-api-key': apiKey
@@ -781,6 +809,8 @@
         `;
       } catch (error) {
         container.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      } finally {
+        endRequest('loadRevenueStats');
       }
     }
     
@@ -1115,8 +1145,12 @@
     
     // 加载用户列表
     async function loadUserList(page = 1) {
+      if (!beginRequest('loadUserList')) return;
       const apiKey = getApiKey();
-      if (!apiKey) return;
+      if (!apiKey) {
+        endRequest('loadUserList');
+        return;
+      }
       
       const loading = document.getElementById('userListLoading');
       const content = document.getElementById('userListContent');
@@ -1127,7 +1161,7 @@
       pagination.classList.add('hidden');
       
       try {
-        const response = await fetch(`${API_BASE_URL}/admin/users?page=${page}&limit=20`, {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/admin/users?page=${page}&limit=20`, {
           method: 'GET',
           headers: {
             'x-admin-api-key': apiKey
@@ -1200,6 +1234,8 @@
       } catch (error) {
         loading.classList.add('hidden');
         content.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      } finally {
+        endRequest('loadUserList');
       }
     }
 
@@ -1408,8 +1444,12 @@
     }
 
     async function loadProductLogStats() {
+      if (!beginRequest('loadProductLogStats')) return;
       const apiKey = getApiKey();
-      if (!apiKey) return;
+      if (!apiKey) {
+        endRequest('loadProductLogStats');
+        return;
+      }
 
       const filters = getLogFilters();
       const statsContainer = document.getElementById('productLogStats');
@@ -1417,7 +1457,7 @@
 
       try {
         const query = buildLogQuery(filters);
-        const response = await fetch(`${API_BASE_URL}/admin/product-log-stats${query ? `?${query}` : ''}`, {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/admin/product-log-stats${query ? `?${query}` : ''}`, {
           method: 'GET',
           headers: {
             'x-admin-api-key': apiKey
@@ -1450,12 +1490,18 @@
         `;
       } catch (error) {
         statsContainer.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      } finally {
+        endRequest('loadProductLogStats');
       }
     }
 
     async function loadProductLogs(page = 1) {
+      if (!beginRequest('loadProductLogs')) return;
       const apiKey = getApiKey();
-      if (!apiKey) return;
+      if (!apiKey) {
+        endRequest('loadProductLogs');
+        return;
+      }
 
       const loading = document.getElementById('productLogLoading');
       const content = document.getElementById('productLogContent');
@@ -1468,7 +1514,7 @@
 
       try {
         const query = buildLogQuery({ ...filters, page, limit: 20 });
-        const response = await fetch(`${API_BASE_URL}/admin/product-logs?${query}`, {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/admin/product-logs?${query}`, {
           method: 'GET',
           headers: {
             'x-admin-api-key': apiKey
@@ -1527,12 +1573,18 @@
       } catch (error) {
         loading.classList.add('hidden');
         content.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      } finally {
+        endRequest('loadProductLogs');
       }
     }
 
     async function loadLoginLogs(page = 1) {
+      if (!beginRequest('loadLoginLogs')) return;
       const apiKey = getApiKey();
-      if (!apiKey) return;
+      if (!apiKey) {
+        endRequest('loadLoginLogs');
+        return;
+      }
 
       const loading = document.getElementById('loginLogLoading');
       const content = document.getElementById('loginLogContent');
@@ -1553,7 +1605,7 @@
           endDate: filters.endDate
         });
 
-        const response = await fetch(`${API_BASE_URL}/admin/login-logs?${query}`, {
+        const response = await fetchWithTimeout(`${API_BASE_URL}/admin/login-logs?${query}`, {
           method: 'GET',
           headers: {
             'x-admin-api-key': apiKey
@@ -1611,6 +1663,8 @@
       } catch (error) {
         loading.classList.add('hidden');
         content.innerHTML = `<div class="result-box error">${JSON.stringify({ error: error.message }, null, 2)}</div>`;
+      } finally {
+        endRequest('loadLoginLogs');
       }
     }
   </script>

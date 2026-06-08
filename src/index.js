@@ -63,7 +63,9 @@ app.use(cors({
       callback(null, true); // 开发环境允许所有来源，生产环境请修改
     }
   },
-  credentials: true
+  credentials: true,
+  maxAge: Math.max(60, parseInt(process.env.CORS_MAX_AGE_SECONDS || '600', 10)),
+  optionsSuccessStatus: 204
 }));
 
 // OPTIONS预检请求快速响应 - 跳过认证和速率限制
@@ -78,7 +80,7 @@ const limiter = rateLimit({
   max: 100, // 限制100个请求
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path === '/health',
+  skip: (req) => req.path === '/health' || req.method === 'OPTIONS',
   keyGenerator: (req) => {
     const forwardedFor = req.headers['x-forwarded-for'];
     if (typeof forwardedFor === 'string' && forwardedFor.trim()) {
