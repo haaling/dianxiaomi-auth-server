@@ -10,9 +10,15 @@ const calculateDaysRemaining = (endDate) => {
   return Math.max(0, Math.ceil((new Date(endDate) - Date.now()) / DAY_IN_MS));
 };
 
-const getLatestSubscription = async (userId) => {
-  return Subscription.findOne({ userId }).sort({ endDate: -1 });
+// activeOnly=true：仅查询 isActive:true 的记录，命中 { userId, isActive, endDate } 复合索引
+// activeOnly=false（默认）：查询所有记录，命中 { userId, endDate } 索引（用于 normalizeSubscriptionState 写回场景）
+const getLatestSubscription = async (userId, { activeOnly = false } = {}) => {
+  const query = activeOnly ? { userId, isActive: true } : { userId };
+  return Subscription.findOne(query).sort({ endDate: -1 });
 };
+
+// 快捷方法：仅获取最新的有效订阅（命中复合索引，避免全集合扫描）
+const getLatestActiveSubscription = (userId) => getLatestSubscription(userId, { activeOnly: true });
 
 const normalizeSubscriptionState = async (subscription) => {
   if (!subscription) {
@@ -44,5 +50,6 @@ const normalizeSubscriptionState = async (subscription) => {
 module.exports = {
   calculateDaysRemaining,
   getLatestSubscription,
+  getLatestActiveSubscription,
   normalizeSubscriptionState
 };
