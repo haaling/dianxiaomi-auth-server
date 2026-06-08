@@ -975,6 +975,144 @@ router.post('/clear-kick-cooldown', async (req, res) => {
 });
 
 /**
+ * 清理产品日志（管理员专用）
+ * POST /api/admin/clear-product-logs
+ * Body: { action?, username?, loginEmail?, loginAccount?, startDate?, endDate? }
+ */
+router.post('/clear-product-logs', async (req, res) => {
+  try {
+    const { action, username, loginEmail, loginAccount, startDate, endDate } = req.body || {};
+    const loginEmailFilter = loginEmail || loginAccount;
+
+    const query = {};
+    if (action) query.action = action;
+    if (username) query.username = username;
+    if (loginEmailFilter) query.loginAccount = loginEmailFilter;
+
+    const createdAtFilter = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      if (!Number.isNaN(start.getTime())) {
+        createdAtFilter.$gte = start;
+      }
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!Number.isNaN(end.getTime())) {
+        end.setHours(23, 59, 59, 999);
+        createdAtFilter.$lte = end;
+      }
+    }
+    if (Object.keys(createdAtFilter).length > 0) {
+      query.createdAt = createdAtFilter;
+    }
+
+    const [matchedCount, deleteResult] = await Promise.all([
+      ProductLog.countDocuments(query),
+      ProductLog.deleteMany(query)
+    ]);
+
+    return res.json({
+      success: true,
+      message: `产品日志清理完成，删除 ${deleteResult.deletedCount} 条`,
+      data: {
+        matchedCount,
+        deletedCount: deleteResult.deletedCount,
+        filter: query
+      }
+    });
+  } catch (error) {
+    console.error('[admin/clear-product-logs] 清理失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '清理产品日志失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 导出产品日志（管理员专用）
+ * GET /api/admin/export-product-logs?action=&username=&loginEmail=&startDate=&endDate=&format=csv|json
+ */
+router.get('/export-product-logs', async (req, res) => {
+  try {
+    const { action, username, loginEmail, loginAccount, startDate, endDate, format = 'csv' } = req.query;
+    const loginEmailFilter = loginEmail || loginAccount;
+
+    const query = {};
+    if (action) query.action = action;
+    if (username) query.username = username;
+    if (loginEmailFilter) query.loginAccount = loginEmailFilter;
+
+    const createdAtFilter = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      if (!Number.isNaN(start.getTime())) {
+        createdAtFilter.$gte = start;
+      }
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!Number.isNaN(end.getTime())) {
+        end.setHours(23, 59, 59, 999);
+        createdAtFilter.$lte = end;
+      }
+    }
+    if (Object.keys(createdAtFilter).length > 0) {
+      query.createdAt = createdAtFilter;
+    }
+
+    const logs = await ProductLog.find(query)
+      .sort({ createdAt: -1 })
+      .select('createdAt action username loginAccount storeName chineseTitle englishTitle sourceUrl')
+      .lean();
+
+    const safeFormat = String(format).toLowerCase();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+    if (safeFormat === 'json') {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="product-logs-${timestamp}.json"`);
+      return res.send(JSON.stringify({ success: true, total: logs.length, data: logs }, null, 2));
+    }
+
+    const escapeCsv = (value) => {
+      if (value === null || value === undefined) return '';
+      const text = String(value);
+      if (/[,"\n\r]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    };
+
+    const headers = ['createdAt', 'action', 'username', 'loginAccount', 'storeName', 'chineseTitle', 'englishTitle', 'sourceUrl'];
+    const rows = logs.map((item) => [
+      item.createdAt ? new Date(item.createdAt).toISOString() : '',
+      item.action,
+      item.username,
+      item.loginAccount,
+      item.storeName,
+      item.chineseTitle,
+      item.englishTitle,
+      item.sourceUrl
+    ].map(escapeCsv).join(','));
+
+    const csv = ['\uFEFF' + headers.join(','), ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="product-logs-${timestamp}.csv"`);
+    return res.send(csv);
+  } catch (error) {
+    console.error('[admin/export-product-logs] 导出失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '导出产品日志失败',
+      error: error.message
+    });
+  }
+});
+
+/**
  * 获取产品日志（管理员专用）
  * GET /api/admin/product-logs?page=1&limit=20&action=&username=&loginEmail=
  */

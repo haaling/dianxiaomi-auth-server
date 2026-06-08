@@ -563,6 +563,9 @@
           <button class="btn btn-primary" onclick="loadProductLogs()">查询日志</button>
           <button class="btn btn-warning" onclick="loadLoginLogs()">查询登录IP日志</button>
           <button class="btn btn-success" onclick="loadProductLogStats()">刷新统计</button>
+          <button class="btn btn-info" onclick="exportProductLogs('csv')">导出日志CSV</button>
+          <button class="btn btn-secondary" onclick="exportProductLogs('json')">导出日志JSON</button>
+          <button class="btn btn-danger" onclick="clearProductLogs()">删除当前筛选日志</button>
           <span style="color: #666; font-size: 13px;">每页显示 20 条</span>
         </div>
       </div>
@@ -1322,6 +1325,86 @@
         }
       });
       return searchParams.toString();
+    }
+
+    function hasAnyLogFilter(filters) {
+      return Boolean(filters.action || filters.username || filters.loginEmail || filters.startDate || filters.endDate);
+    }
+
+    async function exportProductLogs(format = 'csv') {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const filters = getLogFilters();
+      const query = buildLogQuery({ ...filters, format });
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/export-product-logs?${query}`, {
+          method: 'GET',
+          headers: {
+            'x-admin-api-key': apiKey
+          }
+        });
+
+        if (!response.ok) {
+          const result = await response.json();
+          alert(result.message || '导出失败');
+          return;
+        }
+
+        const blob = await response.blob();
+        const now = new Date();
+        const fileTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+        const fileName = `product-logs-${fileTime}.${format === 'json' ? 'json' : 'csv'}`;
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        alert(`导出失败：${error.message}`);
+      }
+    }
+
+    async function clearProductLogs() {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+
+      const filters = getLogFilters();
+      const filtered = hasAnyLogFilter(filters);
+      const message = filtered
+        ? '将删除“当前筛选条件”命中的产品日志。建议先导出，确认继续？'
+        : '当前未设置筛选条件，将删除全部产品日志。建议先导出，确认继续？';
+
+      if (!confirm(message)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/admin/clear-product-logs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-api-key': apiKey
+          },
+          body: JSON.stringify(filters)
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          alert(result.message || '删除日志失败');
+          return;
+        }
+
+        alert(`${result.message}\n匹配: ${result.data?.matchedCount || 0}，删除: ${result.data?.deletedCount || 0}`);
+        loadProductLogStats();
+        loadProductLogs(1);
+      } catch (error) {
+        alert(`删除日志失败：${error.message}`);
+      }
     }
 
     async function loadProductLogStats() {
