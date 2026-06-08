@@ -66,6 +66,21 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
+    // 令牌即将过期时记录警告（剩余不足 1 天），便于诊断和提示客户端主动刷新
+    if (decoded.exp) {
+      const secondsRemaining = decoded.exp - Math.floor(Date.now() / 1000);
+      if (secondsRemaining < 86400) { // 不足 24 小时
+        const hoursRemaining = Math.max(0, Math.floor(secondsRemaining / 3600));
+        console.warn('[auth] Token expiring soon:', {
+          userId: decoded.userId,
+          hoursRemaining,
+          expiresAt: new Date(decoded.exp * 1000).toISOString(),
+          method: req.method,
+          path: req.path
+        });
+      }
+    }
+
     req.user = user;
     req.userId = decoded.userId;
     next();

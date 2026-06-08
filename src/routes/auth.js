@@ -9,12 +9,32 @@ const {
   normalizeSubscriptionState
 } = require('../utils/subscription');
 
-// 生成JWT Token
+// 将过期时间字符串解析为秒数（支持 "7d", "30d", "1h" 等格式）
+const parseExpiresInToSeconds = (expiresIn) => {
+  if (typeof expiresIn === 'number') return expiresIn;
+  const match = String(expiresIn).match(/^(\d+)(s|m|h|d)$/);
+  if (!match) return 7 * 24 * 3600; // 默认 7 天
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  const multipliers = { s: 1, m: 60, h: 3600, d: 86400 };
+  return value * multipliers[unit];
+};
+
+// 生成 Access Token（短期，默认 7 天）
 const generateToken = (userId) => {
   return jwt.sign(
     { userId },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+};
+
+// 生成 Refresh Token（长期，默认 30 天）
+const generateRefreshToken = (userId) => {
+  return jwt.sign(
+    { userId, type: 'refresh' },
+    process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
   );
 };
 
@@ -201,8 +221,12 @@ router.post('/login', async (req, res) => {
       console.error('[auth/login] 记录登录日志失败:', logError.message);
     }
 
-    // 生成Token
+    // 生成 Access Token 和 Refresh Token
     const token = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    const accessExpiresInSeconds = parseExpiresInToSeconds(process.env.JWT_EXPIRES_IN || '7d');
+    const accessExpiresAt = new Date(Date.now() + accessExpiresInSeconds * 1000).toISOString();
 
     const subscription = subscriptionState.subscription;
     const subscriptionData = {
@@ -219,7 +243,10 @@ router.post('/login', async (req, res) => {
       data: {
         user: user.toJSON(),
         subscription: subscriptionData,
-        token
+        token,
+        refreshToken,
+        expiresIn: accessExpiresInSeconds,
+        expiresAt: accessExpiresAt
       }
     });
   } catch (error) {
@@ -228,6 +255,117 @@ router.post('/login', async (req, res) => {
       success: false,
       message: '登录失败',
       error: error.message 
+    });
+  }
+});
+
+// 刷新 Access Token
+// 接受 Refresh Token（推荐）或仍有效的 Access Token
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken, token: accessToken } = req.body;
+
+    // 优先使用 Refresh Token，其次接受仍有效的 Access Token
+    const rawToken = refreshToken || accessToken;
+
+    if (!rawToken) {
+      return res.status(400).json({
+        success: false,
+        message: '请提供 refreshToken 或 token'
+      });
+    }
+
+    // 根据令牌类型选择对应的密钥
+    const isRefreshToken = !!refreshToken;
+    const secret = isRefreshToken
+      ? (process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET)
+      : process.env.JWT_SECRET;
+
+    let decoded;
+    try {
+      decoded = jwt.verify(rawToken, secret);
+    } catch (jwtError) {
+      console.warn('[auth/refresh] Token verification failed:', {
+        error: jwtError.name,
+        message: jwtError.message,
+        isRefreshToken,
+        timestamp: new Date().toISOString()
+      });
+      if (jwtError.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          success: false,
+          message: isRefreshToken ? 'Refresh Token 已过期，请重新登录' : '令牌已过期，请使用 refreshToken 刷新或重新登录',
+          reasonCode: 'TOKEN_EXPIRED'
+        });
+      }
+      return res.status(401).json({
+        success: false,
+        message: '无效的令牌',
+        reasonCode: 'TOKEN_INVALID'
+      });
+    }
+
+    // Refresh Token 必须携带 type: 'refresh' 标记，防止 Access Token 被当作 Refresh Token 使用
+    if (isRefreshToken && decoded.type !== 'refresh') {
+      return res.status(401).json({
+        success: false,
+        message: '无效的 Refresh Token',
+        reasonCode: 'TOKEN_INVALID'
+      });
+    }
+
+    // 查找并验证用户
+    const user = await User.findById(decoded.userId);
+    if (!user || !user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: '用户不存在或已被禁用',
+        reasonCode: 'USER_INACTIVE'
+      });
+    }
+
+    // 验证订阅状态（订阅过期则不允许刷新）
+    const latestSubscription = await getLatestSubscription(user._id);
+    const subscriptionState = await normalizeSubscriptionState(latestSubscription);
+
+    if (!subscriptionState.hasSubscription || !subscriptionState.isValid || subscriptionState.daysRemaining <= 0) {
+      return res.status(403).json({
+        success: false,
+        message: '订阅已过期，请续费后重新登录',
+        reasonCode: 'SUBSCRIPTION_EXPIRED'
+      });
+    }
+
+    // 签发新 Access Token，并轮换 Refresh Token（提升安全性）
+    const newToken = generateToken(user._id);
+    const newRefreshToken = generateRefreshToken(user._id);
+
+    const accessExpiresInSeconds = parseExpiresInToSeconds(process.env.JWT_EXPIRES_IN || '7d');
+    const accessExpiresAt = new Date(Date.now() + accessExpiresInSeconds * 1000).toISOString();
+
+    console.log('[auth/refresh] Token refreshed successfully:', {
+      userId: user._id,
+      email: user.email,
+      isRefreshToken,
+      timestamp: new Date().toISOString()
+    });
+
+    res.json({
+      success: true,
+      message: 'Token 刷新成功',
+      data: {
+        token: newToken,
+        refreshToken: newRefreshToken,
+        expiresIn: accessExpiresInSeconds,
+        expiresAt: accessExpiresAt
+      }
+    });
+  } catch (error) {
+    console.error('[auth/refresh] Unexpected error:', error);
+    res.status(500).json({
+      success: false,
+      message: '刷新 Token 失败',
+      error: error.message
     });
   }
 });
