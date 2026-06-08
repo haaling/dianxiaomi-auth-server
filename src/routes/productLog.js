@@ -27,58 +27,16 @@ const optionalAuth = async (req, res, next) => {
 
 // 记录产品操作日志（公开接口，可选登录）
 router.post('/log', optionalAuth, async (req, res) => {
-  try {
-    const { chineseTitle, englishTitle, originalTitle, sourceUrl, action, storeName, loginAccount } = req.body;
-    const normalizedChineseTitle = chineseTitle || originalTitle;
+  const action = req.body?.action || null;
 
-    // 验证必填字段
-    if (!normalizedChineseTitle || !sourceUrl || !action) {
-      return res.status(400).json({
-        success: false,
-        message: '缺少必填字段：chineseTitle/sourceUrl/action'
-      });
-    }
-
-    // 验证 action 类型
-    const validActions = ['optimizeTitle', 'runAllSteps', 'runSelectedSteps', 'runTemplatePostSteps'];
-    if (!validActions.includes(action)) {
-      return res.status(400).json({
-        success: false,
-        message: `无效的 action 类型，必须是: ${validActions.join(', ')}`
-      });
-    }
-
-    // 创建日志记录
-    const productLog = new ProductLog({
-      userId: req.user ? req.user._id : null,
-      username: req.user ? req.user.username : null,
-      originalTitle: originalTitle || normalizedChineseTitle,
-      chineseTitle: normalizedChineseTitle,
-      englishTitle: englishTitle || null,
-      storeName: storeName || null,
-      loginAccount: loginAccount || req.user?.email || req.user?.username || null,
-      sourceUrl,
+  return res.json({
+    success: true,
+    message: '产品日志已忽略',
+    data: {
+      skipped: true,
       action
-    });
-
-    await productLog.save();
-
-    res.json({
-      success: true,
-      message: '产品日志已记录',
-      data: {
-        logId: productLog._id,
-        createdAt: productLog.createdAt
-      }
-    });
-  } catch (error) {
-    console.error('记录产品日志失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '记录产品日志失败',
-      error: error.message
-    });
-  }
+    }
+  });
 });
 
 // 获取产品日志（仅管理员）
