@@ -1147,14 +1147,18 @@ router.get('/product-logs', async (req, res) => {
       query.createdAt = createdAtFilter;
     }
 
+    const queryStart = Date.now();
     const [logs, total] = await Promise.all([
       ProductLog.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parsedLimit)
-        .select('-__v'),
+        .select('-__v')
+        .lean(),
       ProductLog.countDocuments(query)
     ]);
+    const queryMs = Date.now() - queryStart;
+    console.log('[admin/product-logs] query params:', { page: parsedPage, limit: parsedLimit, action, username, loginEmailFilter, startDate, endDate }, `| docs: ${logs.length}/${total} | time: ${queryMs}ms`);
 
     return res.json({
       success: true,
