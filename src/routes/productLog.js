@@ -2,31 +2,10 @@ const express = require('express');
 const router = express.Router();
 const ProductLog = require('../models/ProductLog');
 const authenticateToken = require('../middleware/auth');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
 
-// 可选的认证中间件 - 提取用户信息但不强制要求登录
-const optionalAuth = async (req, res, next) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.userId);
-      if (user && user.isActive) {
-        req.user = user;
-        req.userId = decoded.userId;
-      }
-    }
-  } catch (error) {
-    // 忽略错误，继续处理请求
-  }
-  next();
-};
-
-// 记录产品操作日志（公开接口，可选登录）
-router.post('/log', optionalAuth, async (req, res) => {
+// 记录产品操作日志（公开接口）
+// 这里直接短路返回，避免任何鉴权查库或日志落库开销。
+router.post('/log', async (req, res) => {
   const action = req.body?.action || null;
 
   return res.json({

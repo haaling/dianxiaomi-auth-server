@@ -12,6 +12,7 @@ const Device = require('../models/Device');
 const ProductLog = require('../models/ProductLog');
 const LoginLog = require('../models/LoginLog');
 const adminAuth = require('../middleware/adminAuth');
+const { invalidateSubscriptionStateCache } = require('../utils/subscription');
 
 const PLAN_CONFIGS = {
   free: { maxDevices: 3, validDays: 30 },
@@ -23,6 +24,52 @@ const PLAN_CONFIGS = {
 };
 
 const VALID_PLANS = Object.keys(PLAN_CONFIGS);
+
+const COUNT_CACHE_TTL_MS = 30 * 1000;
+const REVENUE_CACHE_TTL_MS = 60 * 1000;
+const MAX_COUNT_CACHE_ENTRIES = 200;
+
+const countCache = new Map();
+let revenueCache = {
+  value: 0,
+  expiresAt: 0
+};
+
+const getCachedCount = (key) => {
+  const hit = countCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()) {
+    countCache.delete(key);
+    return null;
+  }
+  return hit.value;
+};
+
+const setCachedCount = (key, value) => {
+  if (countCache.size >= MAX_COUNT_CACHE_ENTRIES) {
+    const oldestKey = countCache.keys().next().value;
+    if (oldestKey) countCache.delete(oldestKey);
+  }
+  countCache.set(key, {
+    value,
+    expiresAt: Date.now() + COUNT_CACHE_TTL_MS
+  });
+};
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildIndexedFriendlyFilter = (value, { normalizeLowercase = false } = {}) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  // 默认精确匹配以命中索引；需要模糊匹配时使用 * 通配符
+  if (raw.includes('*')) {
+    const pattern = `^${escapeRegex(raw).replace(/\\\*/g, '.*')}$`;
+    return { $regex: pattern, $options: 'i' };
+  }
+
+  return normalizeLowercase ? raw.toLowerCase() : raw;
+};
 
 // 所有管理员路由都需要 API Key 认证
 router.use(adminAuth);
@@ -124,6 +171,7 @@ router.post('/create-user', async (req, res) => {
     });
     
     await subscription.save();
+    invalidateSubscriptionStateCache(user._id);
     
     console.log('管理员创建用户成功:', {
       userId: user._id,
@@ -183,32 +231,46 @@ router.get('/users', async (req, res) => {
     
     const t0 = Date.now();
 
-    const [users, total, totalRevenueAgg] = await Promise.all([
+    const [users, total] = await Promise.all([
       User.find()
         .select('-password')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      User.countDocuments(),
-      User.aggregate([
+      User.countDocuments()
+    ]);
+
+    let totalRevenue = revenueCache.value;
+    if (revenueCache.expiresAt <= Date.now()) {
+      const totalRevenueAgg = await User.aggregate([
         {
           $group: {
             _id: null,
             totalRevenue: { $sum: '$income' }
           }
         }
-      ])
-    ]);
-    const totalRevenue = totalRevenueAgg[0]?.totalRevenue || 0;
+      ]);
+      totalRevenue = totalRevenueAgg[0]?.totalRevenue || 0;
+      revenueCache = {
+        value: totalRevenue,
+        expiresAt: Date.now() + REVENUE_CACHE_TTL_MS
+      };
+    }
 
     // 批量获取订阅信息（避免 N+1 查询）
     const userIds = users.map((u) => u._id);
     const subscriptions = await Subscription.find({ userId: { $in: userIds } })
+      .select('userId plan maxDevices endDate isActive')
+      .sort({ endDate: -1 })
       .lean();
-    const subscriptionMap = new Map(
-      subscriptions.map((s) => [String(s.userId), s])
-    );
+    const subscriptionMap = new Map();
+    subscriptions.forEach((s) => {
+      const key = String(s.userId);
+      if (!subscriptionMap.has(key)) {
+        subscriptionMap.set(key, s);
+      }
+    });
 
     const usersWithSubscription = users.map((user) => {
       const subscription = subscriptionMap.get(String(user._id));
@@ -303,6 +365,8 @@ router.post('/update-user-plan', async (req, res) => {
       await subscription.save();
     }
 
+    invalidateSubscriptionStateCache(user._id);
+
     return res.json({
       success: true,
       message: '用户订阅等级更新成功',
@@ -357,19 +421,32 @@ router.post('/batch-update-user-plan', async (req, res) => {
     const users = await User.find({ _id: { $in: uniqueUserIds } }).select('_id username email');
     const usersById = new Map(users.map((u) => [String(u._id), u]));
 
+    const subscriptions = await Subscription.find({
+      userId: { $in: users.map((u) => u._id) }
+    }).sort({ endDate: -1 });
+    const latestSubscriptionByUserId = new Map();
+    for (const subscription of subscriptions) {
+      const key = String(subscription.userId);
+      if (!latestSubscriptionByUserId.has(key)) {
+        latestSubscriptionByUserId.set(key, subscription);
+      }
+    }
+
     const updated = [];
     const failed = [];
     const now = new Date();
 
-    for (const id of uniqueUserIds) {
+    const tasks = uniqueUserIds.map(async (id) => {
       const user = usersById.get(String(id));
       if (!user) {
-        failed.push({ userId: id, reason: '用户不存在' });
-        continue;
+        return {
+          type: 'failed',
+          payload: { userId: id, reason: '用户不存在' }
+        };
       }
 
       try {
-        let subscription = await Subscription.findOne({ userId: user._id }).sort({ endDate: -1 });
+        let subscription = latestSubscriptionByUserId.get(String(user._id));
 
         if (!subscription) {
           const startDate = now;
@@ -389,17 +466,38 @@ router.post('/batch-update-user-plan', async (req, res) => {
           await subscription.save();
         }
 
-        updated.push({
-          userId: String(user._id),
-          email: user.email,
-          username: user.username,
-          plan: subscription.plan,
-          maxDevices: subscription.maxDevices
-        });
+        invalidateSubscriptionStateCache(user._id);
+
+        return {
+          type: 'updated',
+          payload: {
+            userId: String(user._id),
+            email: user.email,
+            username: user.username,
+            plan: subscription.plan,
+            maxDevices: subscription.maxDevices
+          }
+        };
       } catch (error) {
-        failed.push({ userId: String(user._id), email: user.email, reason: error.message });
+        return {
+          type: 'failed',
+          payload: {
+            userId: String(user._id),
+            email: user.email,
+            reason: error.message
+          }
+        };
       }
-    }
+    });
+
+    const results = await Promise.all(tasks);
+    results.forEach((item) => {
+      if (item.type === 'updated') {
+        updated.push(item.payload);
+      } else {
+        failed.push(item.payload);
+      }
+    });
 
     return res.json({
       success: true,
@@ -551,6 +649,7 @@ router.post('/renew-subscription', async (req, res) => {
     subscription.isActive = true;
     
     await subscription.save();
+    invalidateSubscriptionStateCache(user._id);
     
     // 计算剩余天数
     const daysRemaining = Math.max(0, Math.ceil((subscription.endDate - now) / (1000 * 60 * 60 * 24)));
@@ -698,6 +797,7 @@ router.post('/deduct-days', async (req, res) => {
     
     subscription.endDate = newEndDate;
     await subscription.save();
+    invalidateSubscriptionStateCache(user._id);
     
     // 计算剩余天数
     const now = new Date();
@@ -784,6 +884,7 @@ router.post('/update-max-devices', async (req, res) => {
 
     subscription.maxDevices = parsedMaxDevices;
     await subscription.save();
+    invalidateSubscriptionStateCache(user._id);
 
     const now = new Date();
     const daysRemaining = Math.max(0, Math.ceil((subscription.endDate - now) / (1000 * 60 * 60 * 24)));
@@ -1159,15 +1260,22 @@ router.get('/product-logs', async (req, res) => {
     }
 
     const queryStart = Date.now();
-    const [logs, total] = await Promise.all([
-      ProductLog.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parsedLimit)
-        .select('-__v')
-        .lean(),
-      ProductLog.countDocuments(query)
-    ]);
+    const totalCacheKey = `product-logs:${JSON.stringify(query)}`;
+    const cachedTotal = getCachedCount(totalCacheKey);
+    const logsPromise = ProductLog.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parsedLimit)
+      .select('-__v')
+      .lean();
+    const totalPromise = cachedTotal === null
+      ? ProductLog.countDocuments(query)
+      : Promise.resolve(cachedTotal);
+
+    const [logs, total] = await Promise.all([logsPromise, totalPromise]);
+    if (cachedTotal === null) {
+      setCachedCount(totalCacheKey, total);
+    }
     const queryMs = Date.now() - queryStart;
     console.log('[admin/product-logs] query params:', { page: parsedPage, limit: parsedLimit, action, username, loginEmailFilter, startDate, endDate }, `| docs: ${logs.length}/${total} | time: ${queryMs}ms`);
 
@@ -1285,11 +1393,13 @@ router.get('/login-logs', async (req, res) => {
     const skip = (parsedPage - 1) * parsedLimit;
 
     const query = {};
-    if (email) {
-      query.email = { $regex: String(email).trim(), $options: 'i' };
+    const emailFilter = buildIndexedFriendlyFilter(email, { normalizeLowercase: true });
+    const ipFilter = buildIndexedFriendlyFilter(ip);
+    if (emailFilter) {
+      query.email = emailFilter;
     }
-    if (ip) {
-      query.ip = { $regex: String(ip).trim(), $options: 'i' };
+    if (ipFilter) {
+      query.ip = ipFilter;
     }
 
     const loginAtFilter = {};
@@ -1311,15 +1421,22 @@ router.get('/login-logs', async (req, res) => {
     }
 
     const loginLogsT0 = Date.now();
-    const [logs, total] = await Promise.all([
-      LoginLog.find(query)
-        .sort({ loginAt: -1 })
-        .skip(skip)
-        .limit(parsedLimit)
-        .select('-__v')
-        .lean(),
-      LoginLog.countDocuments(query)
-    ]);
+    const totalCacheKey = `login-logs:${JSON.stringify(query)}`;
+    const cachedTotal = getCachedCount(totalCacheKey);
+    const logsPromise = LoginLog.find(query)
+      .sort({ loginAt: -1 })
+      .skip(skip)
+      .limit(parsedLimit)
+      .select('-__v')
+      .lean();
+    const totalPromise = cachedTotal === null
+      ? LoginLog.countDocuments(query)
+      : Promise.resolve(cachedTotal);
+
+    const [logs, total] = await Promise.all([logsPromise, totalPromise]);
+    if (cachedTotal === null) {
+      setCachedCount(totalCacheKey, total);
+    }
     console.log(`[admin/login-logs] page=${parsedPage} limit=${parsedLimit} | docs=${logs.length}/${total} | time=${Date.now() - loginLogsT0}ms`);
 
     return res.json({

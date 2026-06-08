@@ -1,14 +1,12 @@
 const {
-  getLatestActiveSubscription,
-  normalizeSubscriptionState
+  getSubscriptionStateCached
 } = require('../utils/subscription');
 
 // 检查订阅状态
 const checkSubscription = async (req, res, next) => {
   try {
-    // 使用 activeOnly 查询命中 { userId, isActive, endDate } 复合索引，避免全集合扫描
-    const latestSubscription = await getLatestActiveSubscription(req.userId);
-    const subscriptionState = await normalizeSubscriptionState(latestSubscription);
+    // 使用短 TTL 缓存，避免高频 verify/status 每次都查库
+    const subscriptionState = await getSubscriptionStateCached(req.userId, { activeOnly: true });
 
     if (!subscriptionState.hasSubscription) {
       return res.status(403).json({ 

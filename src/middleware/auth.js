@@ -1,6 +1,52 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+const AUTH_LOG_THROTTLE_MS = Math.max(
+  1000,
+  parseInt(process.env.AUTH_LOG_THROTTLE_MS || '60000', 10)
+);
+const AUTH_USER_CACHE_TTL_MS = Math.max(
+  1000,
+  parseInt(process.env.AUTH_USER_CACHE_TTL_MS || '5000', 10)
+);
+const AUTH_USER_CACHE_MAX_ENTRIES = Math.max(
+  100,
+  parseInt(process.env.AUTH_USER_CACHE_MAX_ENTRIES || '5000', 10)
+);
+const AUTH_LOG_TOKEN_EXPIRED = process.env.AUTH_LOG_TOKEN_EXPIRED === 'true';
+
+const authLogThrottle = new Map();
+const userCache = new Map();
+
+const shouldLogAuthKey = (key) => {
+  const now = Date.now();
+  const lastLoggedAt = authLogThrottle.get(key) || 0;
+  if (now - lastLoggedAt >= AUTH_LOG_THROTTLE_MS) {
+    authLogThrottle.set(key, now);
+    return true;
+  }
+  return false;
+};
+
+const pruneUserCache = () => {
+  if (userCache.size <= AUTH_USER_CACHE_MAX_ENTRIES) {
+    return;
+  }
+
+  const now = Date.now();
+  for (const [key, value] of userCache.entries()) {
+    if (value.expiresAt <= now) {
+      userCache.delete(key);
+    }
+  }
+
+  while (userCache.size > AUTH_USER_CACHE_MAX_ENTRIES) {
+    const oldestKey = userCache.keys().next().value;
+    if (!oldestKey) break;
+    userCache.delete(oldestKey);
+  }
+};
+
 // 验证JWT Token
 const authenticateToken = async (req, res, next) => {
   try {
@@ -18,17 +64,34 @@ const authenticateToken = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (jwtError) {
-      console.warn('[auth] JWT verification failed:', {
-        method: req.method,
-        path: req.path,
-        error: jwtError.name,
-        message: jwtError.message,
-        timestamp: new Date().toISOString()
-      });
       if (jwtError.name === 'TokenExpiredError') {
-        return res.status(403).json({ 
+        if (AUTH_LOG_TOKEN_EXPIRED) {
+          const logKey = `${jwtError.name}:${req.method}:${req.path}`;
+          if (shouldLogAuthKey(logKey)) {
+            console.info('[auth] JWT token expired:', {
+              method: req.method,
+              path: req.path,
+              timestamp: new Date().toISOString(),
+              sampled: true
+            });
+          }
+        }
+        return res.status(403).json({
           success: false,
-          message: '令牌已过期' 
+          message: '令牌已过期'
+        });
+      }
+
+      const logKey = `${jwtError.name}:${req.method}:${req.path}`;
+      if (shouldLogAuthKey(logKey)) {
+        // 保留采样日志便于排查无效 token/签名错误。
+        console.warn('[auth] JWT verification failed:', {
+          method: req.method,
+          path: req.path,
+          error: jwtError.name,
+          message: jwtError.message,
+          timestamp: new Date().toISOString(),
+          sampled: true
         });
       }
       return res.status(403).json({ 
@@ -37,25 +100,39 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // 请求级缓存：如果 req.user 已由上游中间件填充则跳过数据库查询
+    // 请求级缓存：如果 req.user 已由上游中间件填充则跳过后续查库和进程内缓存。
     if (req.user) {
       req.userId = decoded.userId;
       return next();
     }
 
-    // 查找用户（.lean() 跳过 Mongoose 文档水化，减少每次查询的开销）
-    const dbStart = Date.now();
-    const user = await User.findById(decoded.userId).lean();
-    const dbDuration = Date.now() - dbStart;
-
-    if (dbDuration > 100) {
-      console.warn(`[auth] User.findById slow query: ${dbDuration}ms`, {
-        userId: decoded.userId,
-        method: req.method,
-        path: req.path
-      });
+    // 高频 /verify /status 请求使用短 TTL 缓存，减少重复查库。
+    const cacheKey = String(decoded.userId);
+    const now = Date.now();
+    let user = null;
+    const cached = userCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      user = cached.user;
     } else {
-      console.debug(`[auth] User.findById: ${dbDuration}ms (userId=${decoded.userId})`);
+      const dbStart = Date.now();
+      user = await User.findById(decoded.userId)
+        .select('_id username email isActive lastLoginAt income')
+        .lean();
+      const dbDuration = Date.now() - dbStart;
+
+      if (dbDuration > 100) {
+        console.warn(`[auth] User.findById slow query: ${dbDuration}ms`, {
+          userId: decoded.userId,
+          method: req.method,
+          path: req.path
+        });
+      }
+
+      userCache.set(cacheKey, {
+        user,
+        expiresAt: now + AUTH_USER_CACHE_TTL_MS
+      });
+      pruneUserCache();
     }
 
     if (!user || !user.isActive) {

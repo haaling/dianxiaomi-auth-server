@@ -3,25 +3,41 @@ const router = express.Router();
 const Subscription = require('../models/Subscription');
 const authenticateToken = require('../middleware/auth');
 const {
-  getLatestSubscription,
-  getLatestActiveSubscription,
-  normalizeSubscriptionState
+  getSubscriptionStateCached,
+  invalidateSubscriptionStateCache
 } = require('../utils/subscription');
+
+const SUBSCRIPTION_QUERY_SLOW_MS = Math.max(
+  50,
+  parseInt(process.env.SUBSCRIPTION_QUERY_SLOW_MS || '200', 10)
+);
+const SUBSCRIPTION_QUERY_LOG_MODE = process.env.SUBSCRIPTION_QUERY_LOG_MODE || 'slow';
+
+const logSubscriptionQuery = (route, userId, durationMs) => {
+  if (SUBSCRIPTION_QUERY_LOG_MODE === 'off') {
+    return;
+  }
+
+  if (SUBSCRIPTION_QUERY_LOG_MODE === 'all' || durationMs >= SUBSCRIPTION_QUERY_SLOW_MS) {
+    console.log(`[subscription] ${route} query took ${durationMs}ms (userId=${userId})`);
+  }
+};
 
 // 获取当前订阅信息
 router.get('/current', authenticateToken, async (req, res) => {
   try {
     const t0 = Date.now();
-    // 命中 { userId, isActive, endDate } 复合索引：过滤 isActive:true 并按 endDate 降序
-    const subscription = await getLatestActiveSubscription(req.userId);
-    console.log(`[subscription] /current query took ${Date.now() - t0}ms (userId=${req.userId})`);
+    const subscriptionState = await getSubscriptionStateCached(req.userId, { activeOnly: true });
+    logSubscriptionQuery('/current', req.userId, Date.now() - t0);
 
-    if (!subscription) {
+    if (!subscriptionState.hasSubscription) {
       return res.status(404).json({ 
         success: false,
         message: '未找到有效订阅' 
       });
     }
+
+    const subscription = subscriptionState.subscription;
 
     res.json({
       success: true,
@@ -30,7 +46,7 @@ router.get('/current', authenticateToken, async (req, res) => {
         maxDevices: subscription.maxDevices,
         startDate: subscription.startDate,
         endDate: subscription.endDate,
-        isValid: subscription.isValid(),
+        isValid: subscriptionState.isValid,
         autoRenew: subscription.autoRenew
       }
     });
@@ -84,6 +100,7 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
     });
 
     await subscription.save();
+    invalidateSubscriptionStateCache(req.userId);
 
     res.status(201).json({
       success: true,
@@ -110,10 +127,8 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
 router.get('/status', authenticateToken, async (req, res) => {
   try {
     const t0 = Date.now();
-    // getLatestSubscription（不带 activeOnly）以便 normalizeSubscriptionState 可写回过期状态
-    const latestSubscription = await getLatestSubscription(req.userId);
-    console.log(`[subscription] /status query took ${Date.now() - t0}ms (userId=${req.userId})`);
-    const subscriptionState = await normalizeSubscriptionState(latestSubscription);
+    const subscriptionState = await getSubscriptionStateCached(req.userId, { activeOnly: false });
+    logSubscriptionQuery('/status', req.userId, Date.now() - t0);
 
     if (!subscriptionState.hasSubscription) {
       return res.json({ 
