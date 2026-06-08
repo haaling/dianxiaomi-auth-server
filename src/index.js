@@ -66,6 +66,12 @@ app.use(cors({
   credentials: true
 }));
 
+// OPTIONS预检请求快速响应 - 跳过认证和速率限制
+// 浏览器在跨域请求前会发送OPTIONS预检，无需认证，直接返回200
+app.options('*', (req, res) => {
+  res.sendStatus(200);
+});
+
 // 速率限制
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15分钟
