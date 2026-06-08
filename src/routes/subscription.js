@@ -4,16 +4,17 @@ const Subscription = require('../models/Subscription');
 const authenticateToken = require('../middleware/auth');
 const {
   getLatestSubscription,
+  getLatestActiveSubscription,
   normalizeSubscriptionState
 } = require('../utils/subscription');
 
 // 获取当前订阅信息
 router.get('/current', authenticateToken, async (req, res) => {
   try {
-    const subscription = await Subscription.findOne({ 
-      userId: req.userId,
-      isActive: true 
-    }).sort({ endDate: -1 });
+    const t0 = Date.now();
+    // 命中 { userId, isActive, endDate } 复合索引：过滤 isActive:true 并按 endDate 降序
+    const subscription = await getLatestActiveSubscription(req.userId);
+    console.log(`[subscription] /current query took ${Date.now() - t0}ms (userId=${req.userId})`);
 
     if (!subscription) {
       return res.status(404).json({ 
@@ -108,7 +109,10 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
 // 检查订阅状态
 router.get('/status', authenticateToken, async (req, res) => {
   try {
+    const t0 = Date.now();
+    // getLatestSubscription（不带 activeOnly）以便 normalizeSubscriptionState 可写回过期状态
     const latestSubscription = await getLatestSubscription(req.userId);
+    console.log(`[subscription] /status query took ${Date.now() - t0}ms (userId=${req.userId})`);
     const subscriptionState = await normalizeSubscriptionState(latestSubscription);
 
     if (!subscriptionState.hasSubscription) {
