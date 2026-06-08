@@ -1,6 +1,51 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+const AUTH_LOG_THROTTLE_MS = Math.max(
+  1000,
+  parseInt(process.env.AUTH_LOG_THROTTLE_MS || '60000', 10)
+);
+const AUTH_USER_CACHE_TTL_MS = Math.max(
+  1000,
+  parseInt(process.env.AUTH_USER_CACHE_TTL_MS || '5000', 10)
+);
+const AUTH_USER_CACHE_MAX_ENTRIES = Math.max(
+  100,
+  parseInt(process.env.AUTH_USER_CACHE_MAX_ENTRIES || '5000', 10)
+);
+
+const authLogThrottle = new Map();
+const userCache = new Map();
+
+const shouldLogAuthKey = (key) => {
+  const now = Date.now();
+  const lastLoggedAt = authLogThrottle.get(key) || 0;
+  if (now - lastLoggedAt >= AUTH_LOG_THROTTLE_MS) {
+    authLogThrottle.set(key, now);
+    return true;
+  }
+  return false;
+};
+
+const pruneUserCache = () => {
+  if (userCache.size <= AUTH_USER_CACHE_MAX_ENTRIES) {
+    return;
+  }
+
+  const now = Date.now();
+  for (const [key, value] of userCache.entries()) {
+    if (value.expiresAt <= now) {
+      userCache.delete(key);
+    }
+  }
+
+  while (userCache.size > AUTH_USER_CACHE_MAX_ENTRIES) {
+    const oldestKey = userCache.keys().next().value;
+    if (!oldestKey) break;
+    userCache.delete(oldestKey);
+  }
+};
+
 // 验证JWT Token
 const authenticateToken = async (req, res, next) => {
   try {
@@ -18,13 +63,18 @@ const authenticateToken = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (jwtError) {
-      console.warn('[auth] JWT verification failed:', {
-        method: req.method,
-        path: req.path,
-        error: jwtError.name,
-        message: jwtError.message,
-        timestamp: new Date().toISOString()
-      });
+      const logKey = `${jwtError.name}:${req.method}:${req.path}`;
+      if (shouldLogAuthKey(logKey)) {
+        // 避免过期 token 高频刷日志；保留采样日志便于排查。
+        console.warn('[auth] JWT verification failed:', {
+          method: req.method,
+          path: req.path,
+          error: jwtError.name,
+          message: jwtError.message,
+          timestamp: new Date().toISOString(),
+          sampled: true
+        });
+      }
       if (jwtError.name === 'TokenExpiredError') {
         return res.status(403).json({ 
           success: false,
@@ -37,19 +87,33 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // 查找用户（记录耗时以便诊断慢查询）
-    const dbStart = Date.now();
-    const user = await User.findById(decoded.userId);
-    const dbDuration = Date.now() - dbStart;
-
-    if (dbDuration > 200) {
-      console.warn(`[auth] User.findById slow query: ${dbDuration}ms`, {
-        userId: decoded.userId,
-        method: req.method,
-        path: req.path
-      });
+    // 高频 /verify /status 请求使用短 TTL 缓存，减少重复查库。
+    const cacheKey = String(decoded.userId);
+    const now = Date.now();
+    let user = null;
+    const cached = userCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      user = cached.user;
     } else {
-      console.debug(`[auth] User.findById: ${dbDuration}ms (userId=${decoded.userId})`);
+      const dbStart = Date.now();
+      user = await User.findById(decoded.userId)
+        .select('_id username email isActive lastLoginAt income')
+        .lean();
+      const dbDuration = Date.now() - dbStart;
+
+      if (dbDuration > 200) {
+        console.warn(`[auth] User.findById slow query: ${dbDuration}ms`, {
+          userId: decoded.userId,
+          method: req.method,
+          path: req.path
+        });
+      }
+
+      userCache.set(cacheKey, {
+        user,
+        expiresAt: now + AUTH_USER_CACHE_TTL_MS
+      });
+      pruneUserCache();
     }
 
     if (!user || !user.isActive) {

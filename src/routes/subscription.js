@@ -3,25 +3,25 @@ const router = express.Router();
 const Subscription = require('../models/Subscription');
 const authenticateToken = require('../middleware/auth');
 const {
-  getLatestSubscription,
-  getLatestActiveSubscription,
-  normalizeSubscriptionState
+  getSubscriptionStateCached,
+  invalidateSubscriptionStateCache
 } = require('../utils/subscription');
 
 // 获取当前订阅信息
 router.get('/current', authenticateToken, async (req, res) => {
   try {
     const t0 = Date.now();
-    // 命中 { userId, isActive, endDate } 复合索引：过滤 isActive:true 并按 endDate 降序
-    const subscription = await getLatestActiveSubscription(req.userId);
+    const subscriptionState = await getSubscriptionStateCached(req.userId, { activeOnly: true });
     console.log(`[subscription] /current query took ${Date.now() - t0}ms (userId=${req.userId})`);
 
-    if (!subscription) {
+    if (!subscriptionState.hasSubscription) {
       return res.status(404).json({ 
         success: false,
         message: '未找到有效订阅' 
       });
     }
+
+    const subscription = subscriptionState.subscription;
 
     res.json({
       success: true,
@@ -30,7 +30,7 @@ router.get('/current', authenticateToken, async (req, res) => {
         maxDevices: subscription.maxDevices,
         startDate: subscription.startDate,
         endDate: subscription.endDate,
-        isValid: subscription.isValid(),
+        isValid: subscriptionState.isValid,
         autoRenew: subscription.autoRenew
       }
     });
@@ -84,6 +84,7 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
     });
 
     await subscription.save();
+    invalidateSubscriptionStateCache(req.userId);
 
     res.status(201).json({
       success: true,
@@ -110,10 +111,8 @@ router.post('/subscribe', authenticateToken, async (req, res) => {
 router.get('/status', authenticateToken, async (req, res) => {
   try {
     const t0 = Date.now();
-    // getLatestSubscription（不带 activeOnly）以便 normalizeSubscriptionState 可写回过期状态
-    const latestSubscription = await getLatestSubscription(req.userId);
+    const subscriptionState = await getSubscriptionStateCached(req.userId, { activeOnly: false });
     console.log(`[subscription] /status query took ${Date.now() - t0}ms (userId=${req.userId})`);
-    const subscriptionState = await normalizeSubscriptionState(latestSubscription);
 
     if (!subscriptionState.hasSubscription) {
       return res.json({ 

@@ -12,6 +12,7 @@ const Device = require('../models/Device');
 const ProductLog = require('../models/ProductLog');
 const LoginLog = require('../models/LoginLog');
 const adminAuth = require('../middleware/adminAuth');
+const { invalidateSubscriptionStateCache } = require('../utils/subscription');
 
 const PLAN_CONFIGS = {
   free: { maxDevices: 3, validDays: 30 },
@@ -170,6 +171,7 @@ router.post('/create-user', async (req, res) => {
     });
     
     await subscription.save();
+    invalidateSubscriptionStateCache(user._id);
     
     console.log('管理员创建用户成功:', {
       userId: user._id,
@@ -363,6 +365,8 @@ router.post('/update-user-plan', async (req, res) => {
       await subscription.save();
     }
 
+    invalidateSubscriptionStateCache(user._id);
+
     return res.json({
       success: true,
       message: '用户订阅等级更新成功',
@@ -461,6 +465,8 @@ router.post('/batch-update-user-plan', async (req, res) => {
           subscription.isActive = subscription.endDate > now;
           await subscription.save();
         }
+
+        invalidateSubscriptionStateCache(user._id);
 
         return {
           type: 'updated',
@@ -643,6 +649,7 @@ router.post('/renew-subscription', async (req, res) => {
     subscription.isActive = true;
     
     await subscription.save();
+    invalidateSubscriptionStateCache(user._id);
     
     // 计算剩余天数
     const daysRemaining = Math.max(0, Math.ceil((subscription.endDate - now) / (1000 * 60 * 60 * 24)));
@@ -790,6 +797,7 @@ router.post('/deduct-days', async (req, res) => {
     
     subscription.endDate = newEndDate;
     await subscription.save();
+    invalidateSubscriptionStateCache(user._id);
     
     // 计算剩余天数
     const now = new Date();
@@ -876,6 +884,7 @@ router.post('/update-max-devices', async (req, res) => {
 
     subscription.maxDevices = parsedMaxDevices;
     await subscription.save();
+    invalidateSubscriptionStateCache(user._id);
 
     const now = new Date();
     const daysRemaining = Math.max(0, Math.ceil((subscription.endDate - now) / (1000 * 60 * 60 * 24)));
