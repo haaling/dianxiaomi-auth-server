@@ -357,19 +357,32 @@ router.post('/batch-update-user-plan', async (req, res) => {
     const users = await User.find({ _id: { $in: uniqueUserIds } }).select('_id username email');
     const usersById = new Map(users.map((u) => [String(u._id), u]));
 
+    const subscriptions = await Subscription.find({
+      userId: { $in: users.map((u) => u._id) }
+    }).sort({ endDate: -1 });
+    const latestSubscriptionByUserId = new Map();
+    for (const subscription of subscriptions) {
+      const key = String(subscription.userId);
+      if (!latestSubscriptionByUserId.has(key)) {
+        latestSubscriptionByUserId.set(key, subscription);
+      }
+    }
+
     const updated = [];
     const failed = [];
     const now = new Date();
 
-    for (const id of uniqueUserIds) {
+    const tasks = uniqueUserIds.map(async (id) => {
       const user = usersById.get(String(id));
       if (!user) {
-        failed.push({ userId: id, reason: '用户不存在' });
-        continue;
+        return {
+          type: 'failed',
+          payload: { userId: id, reason: '用户不存在' }
+        };
       }
 
       try {
-        let subscription = await Subscription.findOne({ userId: user._id }).sort({ endDate: -1 });
+        let subscription = latestSubscriptionByUserId.get(String(user._id));
 
         if (!subscription) {
           const startDate = now;
@@ -389,17 +402,36 @@ router.post('/batch-update-user-plan', async (req, res) => {
           await subscription.save();
         }
 
-        updated.push({
-          userId: String(user._id),
-          email: user.email,
-          username: user.username,
-          plan: subscription.plan,
-          maxDevices: subscription.maxDevices
-        });
+        return {
+          type: 'updated',
+          payload: {
+            userId: String(user._id),
+            email: user.email,
+            username: user.username,
+            plan: subscription.plan,
+            maxDevices: subscription.maxDevices
+          }
+        };
       } catch (error) {
-        failed.push({ userId: String(user._id), email: user.email, reason: error.message });
+        return {
+          type: 'failed',
+          payload: {
+            userId: String(user._id),
+            email: user.email,
+            reason: error.message
+          }
+        };
       }
-    }
+    });
+
+    const results = await Promise.all(tasks);
+    results.forEach((item) => {
+      if (item.type === 'updated') {
+        updated.push(item.payload);
+      } else {
+        failed.push(item.payload);
+      }
+    });
 
     return res.json({
       success: true,

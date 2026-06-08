@@ -5,6 +5,11 @@ const authenticateToken = require('../middleware/auth');
 const checkSubscription = require('../middleware/subscription');
 const checkDeviceLimit = require('../middleware/deviceLimit');
 
+const DEVICE_ACTIVITY_WRITE_INTERVAL_MS = Math.max(
+  60000,
+  parseInt(process.env.DEVICE_ACTIVITY_WRITE_INTERVAL_MS || '300000', 10)
+);
+
 // 注册新设备
 router.post('/register', authenticateToken, checkSubscription, checkDeviceLimit, async (req, res) => {
   try {
@@ -192,8 +197,17 @@ router.post('/verify', authenticateToken, checkSubscription, async (req, res) =>
       });
     }
 
-    // 更新设备活跃时间
-    await device.updateActivity();
+    // 高频 verify 请求下节流写库，减少 lastActiveAt 写放大
+    const now = Date.now();
+    const lastActiveAtMs = device.lastActiveAt ? new Date(device.lastActiveAt).getTime() : 0;
+    if (!lastActiveAtMs || now - lastActiveAtMs >= DEVICE_ACTIVITY_WRITE_INTERVAL_MS) {
+      const newLastActiveAt = new Date(now);
+      await Device.updateOne(
+        { _id: device._id },
+        { $set: { lastActiveAt: newLastActiveAt } }
+      );
+      device.lastActiveAt = newLastActiveAt;
+    }
 
     res.json({
       success: true,
