@@ -37,12 +37,18 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // 查找用户（记录耗时以便诊断慢查询）
+    // 请求级缓存：如果 req.user 已由上游中间件填充则跳过数据库查询
+    if (req.user) {
+      req.userId = decoded.userId;
+      return next();
+    }
+
+    // 查找用户（.lean() 跳过 Mongoose 文档水化，减少每次查询的开销）
     const dbStart = Date.now();
-    const user = await User.findById(decoded.userId);
+    const user = await User.findById(decoded.userId).lean();
     const dbDuration = Date.now() - dbStart;
 
-    if (dbDuration > 200) {
+    if (dbDuration > 100) {
       console.warn(`[auth] User.findById slow query: ${dbDuration}ms`, {
         userId: decoded.userId,
         method: req.method,
