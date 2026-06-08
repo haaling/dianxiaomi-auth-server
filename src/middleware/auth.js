@@ -13,6 +13,7 @@ const AUTH_USER_CACHE_MAX_ENTRIES = Math.max(
   100,
   parseInt(process.env.AUTH_USER_CACHE_MAX_ENTRIES || '5000', 10)
 );
+const AUTH_LOG_TOKEN_EXPIRED = process.env.AUTH_LOG_TOKEN_EXPIRED === 'true';
 
 const authLogThrottle = new Map();
 const userCache = new Map();
@@ -63,9 +64,27 @@ const authenticateToken = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (jwtError) {
+      if (jwtError.name === 'TokenExpiredError') {
+        if (AUTH_LOG_TOKEN_EXPIRED) {
+          const logKey = `${jwtError.name}:${req.method}:${req.path}`;
+          if (shouldLogAuthKey(logKey)) {
+            console.info('[auth] JWT token expired:', {
+              method: req.method,
+              path: req.path,
+              timestamp: new Date().toISOString(),
+              sampled: true
+            });
+          }
+        }
+        return res.status(403).json({
+          success: false,
+          message: '令牌已过期'
+        });
+      }
+
       const logKey = `${jwtError.name}:${req.method}:${req.path}`;
       if (shouldLogAuthKey(logKey)) {
-        // 避免过期 token 高频刷日志；保留采样日志便于排查。
+        // 保留采样日志便于排查无效 token/签名错误。
         console.warn('[auth] JWT verification failed:', {
           method: req.method,
           path: req.path,
@@ -73,12 +92,6 @@ const authenticateToken = async (req, res, next) => {
           message: jwtError.message,
           timestamp: new Date().toISOString(),
           sampled: true
-        });
-      }
-      if (jwtError.name === 'TokenExpiredError') {
-        return res.status(403).json({ 
-          success: false,
-          message: '令牌已过期' 
         });
       }
       return res.status(403).json({ 

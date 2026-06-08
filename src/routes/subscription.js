@@ -7,12 +7,28 @@ const {
   invalidateSubscriptionStateCache
 } = require('../utils/subscription');
 
+const SUBSCRIPTION_QUERY_SLOW_MS = Math.max(
+  50,
+  parseInt(process.env.SUBSCRIPTION_QUERY_SLOW_MS || '200', 10)
+);
+const SUBSCRIPTION_QUERY_LOG_MODE = process.env.SUBSCRIPTION_QUERY_LOG_MODE || 'slow';
+
+const logSubscriptionQuery = (route, userId, durationMs) => {
+  if (SUBSCRIPTION_QUERY_LOG_MODE === 'off') {
+    return;
+  }
+
+  if (SUBSCRIPTION_QUERY_LOG_MODE === 'all' || durationMs >= SUBSCRIPTION_QUERY_SLOW_MS) {
+    console.log(`[subscription] ${route} query took ${durationMs}ms (userId=${userId})`);
+  }
+};
+
 // 获取当前订阅信息
 router.get('/current', authenticateToken, async (req, res) => {
   try {
     const t0 = Date.now();
     const subscriptionState = await getSubscriptionStateCached(req.userId, { activeOnly: true });
-    console.log(`[subscription] /current query took ${Date.now() - t0}ms (userId=${req.userId})`);
+    logSubscriptionQuery('/current', req.userId, Date.now() - t0);
 
     if (!subscriptionState.hasSubscription) {
       return res.status(404).json({ 
@@ -112,7 +128,7 @@ router.get('/status', authenticateToken, async (req, res) => {
   try {
     const t0 = Date.now();
     const subscriptionState = await getSubscriptionStateCached(req.userId, { activeOnly: false });
-    console.log(`[subscription] /status query took ${Date.now() - t0}ms (userId=${req.userId})`);
+    logSubscriptionQuery('/status', req.userId, Date.now() - t0);
 
     if (!subscriptionState.hasSubscription) {
       return res.json({ 
