@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const { randomUUID } = require('crypto');
 const connectDB = require('./config/database');
 
 // 导入路由
@@ -12,6 +13,10 @@ const adminRoutes = require('./routes/admin');
 const productLogRoutes = require('./routes/productLog');
 
 const app = express();
+const SLOW_REQUEST_MS = Math.max(
+  100,
+  parseInt(process.env.SLOW_REQUEST_MS || '1500', 10)
+);
 
 // Railway 等平台通常在应用前面只有 1 层反向代理。
 // 避免使用 true（信任任意层代理）触发 express-rate-limit 的安全告警。
@@ -40,6 +45,38 @@ connectDB().catch(err => {
 // 中间件
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 请求观测：标记 requestId，并回传服务端处理耗时。
+app.use((req, res, next) => {
+  const startHr = process.hrtime.bigint();
+  const requestId = String(req.headers['x-request-id'] || randomUUID());
+  req.requestId = requestId;
+  res.setHeader('x-request-id', requestId);
+
+  const originalEnd = res.end;
+  res.end = function wrappedEnd(...args) {
+    const durationMs = Number(process.hrtime.bigint() - startHr) / 1e6;
+    if (!res.headersSent) {
+      res.setHeader('x-server-time-ms', durationMs.toFixed(1));
+    }
+
+    if (durationMs >= SLOW_REQUEST_MS) {
+      console.warn('[http] Slow request detected:', {
+        requestId,
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: res.statusCode,
+        durationMs: Number(durationMs.toFixed(1)),
+        ip: req.ip,
+        userAgent: req.headers['user-agent'] || null
+      });
+    }
+
+    return originalEnd.apply(this, args);
+  };
+
+  next();
+});
 
 // CORS配置 - 支持Chrome插件
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
@@ -111,7 +148,8 @@ app.get('/health', (req, res) => {
   res.json({ 
     success: true,
     message: '服务器运行正常',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime())
   });
 });
 

@@ -685,6 +685,16 @@
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       try {
         return await fetch(url, { ...options, signal: controller.signal });
+      } catch (error) {
+        const message = String(error?.message || '').toLowerCase();
+        const isAbortLike =
+          error?.name === 'AbortError' ||
+          message.includes('aborted') ||
+          message.includes('abort');
+        if (isAbortLike) {
+          throw new Error(`请求超时（>${Math.ceil(timeoutMs / 1000)}秒），请稍后重试`);
+        }
+        throw error;
       } finally {
         clearTimeout(timeoutId);
       }
