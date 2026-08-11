@@ -40,6 +40,9 @@ const userSchema = new mongoose.Schema({
   }
 });
 
+// _id 由 MongoDB 自动索引，无需显式声明
+// 为认证中间件的 isActive 过滤添加索引（每次鉴权请求都会检查此字段）
+userSchema.index({ isActive: 1 });
 // 为管理员列表查询添加排序索引
 userSchema.index({ createdAt: -1 });
 // 为营收统计聚合添加索引

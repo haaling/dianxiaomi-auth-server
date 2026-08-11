@@ -100,6 +100,12 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
+    // 请求级缓存：如果 req.user 已由上游中间件填充则跳过后续查库和进程内缓存。
+    if (req.user) {
+      req.userId = decoded.userId;
+      return next();
+    }
+
     // 高频 /verify /status 请求使用短 TTL 缓存，减少重复查库。
     const cacheKey = String(decoded.userId);
     const now = Date.now();
@@ -110,11 +116,11 @@ const authenticateToken = async (req, res, next) => {
     } else {
       const dbStart = Date.now();
       user = await User.findById(decoded.userId)
-        .select('_id username email isActive lastLoginAt income')
+        .select('username isActive')
         .lean();
       const dbDuration = Date.now() - dbStart;
 
-      if (dbDuration > 200) {
+      if (dbDuration > 100) {
         console.warn(`[auth] User.findById slow query: ${dbDuration}ms`, {
           userId: decoded.userId,
           method: req.method,

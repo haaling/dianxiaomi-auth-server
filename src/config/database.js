@@ -20,6 +20,8 @@ const connectDB = async () => {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000,  // 单次连接建立超时，避免慢连接长时间阻塞
+      // 连接池：预热 10 条连接，上限 50 条，减少远程 MongoDB 的连接建立延迟
       maxPoolSize: 50,
       minPoolSize: 10,
     });
